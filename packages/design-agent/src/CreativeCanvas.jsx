@@ -15,7 +15,7 @@ import { RiRobot2Line, RiSparklingLine } from "react-icons/ri";
 // import { useUser } from "@/context/UserContext";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
-import toast from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import PlanVisualizer from "./components/PlanVisualizer";
@@ -62,8 +62,6 @@ const TypingDots = () => (
 
 export default function CreativeCanvas({
   user,
-  isAuthorized,
-  logout,
   theme: forcedTheme,
   setTheme: forcedSetTheme,
   creditConversionRate = 200,
@@ -72,7 +70,7 @@ export default function CreativeCanvas({
   //   1. Sends `x-agent-embed-code: <code>` instead of a Bearer token.
   //   2. Tracks session_id in localStorage instead of the URL query string
   //      (the iframe URL stays at /embed/agent/<code>).
-  //   3. Hides owner-only UI (sessions sidebar, profile menu, /assistant links).
+  //   3. Hides owner-only UI (sessions sidebar, profile menu, / links).
   embedCode = null,
   isEmbed = false,
   // Platform customization props:
@@ -187,7 +185,7 @@ export default function CreativeCanvas({
   // Handle initial query and skill from URL (Fallback only)
   useEffect(() => {
     if (!mounted || busy || initialHandoffProcessed.current) return;
-    // Embed pages never have a /assistant handoff URL — skip.
+    // Embed pages never have a / handoff URL — skip.
     if (inEmbedMode) {
       initialHandoffProcessed.current = true;
       return;
@@ -584,20 +582,23 @@ export default function CreativeCanvas({
       const activeSessionId = await ensureSession();
 
       // 1. Get signed URL
-      const { data: signData } = await axios.get("/api/app/get_file_upload_url", {
+      const { data: signData } = await axios.get("/api/v1/get_upload_url", {
         params: { filename: file.name },
         headers: getHeaders()
       });
 
       const { url, fields } = signData;
+      
+      // Use the proxy for the actual binary upload to maintain consistency and avoid CORS issues
       const formData = new FormData();
+      formData.append("x-proxy-target-url", url);
       Object.entries(fields).forEach(([key, value]) => {
         formData.append(key, value);
       });
       formData.append("file", file);
 
-      // 2. Upload to signed URL
-      await axios.post(url, formData, {
+      // 2. Upload via local proxy
+      await axios.post("/api/v1/upload-binary", formData, {
         headers: { "Content-Type": "multipart/form-data" },
         onUploadProgress: (pe) => {
           setUploadProgress(Math.round((pe.loaded * 100) / pe.total));
@@ -875,7 +876,7 @@ export default function CreativeCanvas({
       } else {
         fetchSessions();
         if (id === sessionId) {
-          router.push("/assistant/canvas");
+          router.push("/canvas");
         }
       }
     } catch (err) {
@@ -924,9 +925,28 @@ export default function CreativeCanvas({
     setTimeout(() => textareaRef.current?.focus(), 10);
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard");
+  const copyToClipboard = async (text) => {
+    if (!text) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copied to clipboard");
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          toast.success("Copied to clipboard");
+        } catch (err) {
+          toast.error("Failed to copy");
+        }
+        document.body.removeChild(textArea);
+      }
+    } catch (err) {
+      toast.error("Failed to copy");
+    }
   };
 
   const handleKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
@@ -938,6 +958,7 @@ export default function CreativeCanvas({
 
   return (
     <div className="h-dvh w-full text-sm flex flex-col bg-bg-page text-primary-text overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <Toaster position="top-right" reverseOrder={false} />
       <main className="flex h-full w-full overflow-hidden">
         {/* Left Sidebar: Session List — owner only. Embed visitors don't get
             a session switcher; the iframe is scoped to one localStorage-keyed
@@ -946,7 +967,7 @@ export default function CreativeCanvas({
           <div className="p-3 border-b border-divider flex items-center justify-between bg-bg-card/50">
             <div className="flex items-center gap-2 overflow-hidden">
               <Link 
-                href="/assistant"
+                href="/"
                 className={`p-2 hover:bg-bg-page rounded text-secondary-text hover:text-primary transition-colors`}
                 title="Go Back"
               >
@@ -957,15 +978,7 @@ export default function CreativeCanvas({
                 className="flex items-center flex-shrink-0 transition-transform duration-300 hover:scale-[1.02] active:scale-95"
                 aria-label="Home"
               >
-                <Image
-                  src="/vadoo-logo.png"
-                  alt="Vadoo Logo"
-                  width={120}
-                  height={40}
-                  quality={100}
-                  priority
-                  className="w-24 h-auto dark:brightness-0 dark:invert transition-all"
-                />
+                <span className="font-bold text-lg">Design Agent Studio</span>
               </Link>
             </div>
             <button 
@@ -1066,7 +1079,7 @@ export default function CreativeCanvas({
 
               {!inEmbedMode && (
                 <Link
-                  href="/assistant"
+                  href="/"
                   className={`p-1.5 hover:bg-bg-card rounded text-secondary-text hover:text-primary transition-colors ${!showLeftSidebar && "hidden"}`}
                   title="Go Back"
                 >
@@ -1100,12 +1113,6 @@ export default function CreativeCanvas({
                   >
                     {userBalanceLabel ?? `$ ${user?.balance || "0.00"}`}
                   </span>
-                  <Link
-                    href={`${userBalanceLabel ? "/subscription" : "/topup"}`}
-                    className="flex items-center justify-center w-5 h-5 rounded hover:bg-bg-card text-secondary-text transition-colors"
-                  >
-                    <FiPlus size={14} />
-                  </Link>
                 </div>
               )}
 
@@ -1169,21 +1176,6 @@ export default function CreativeCanvas({
                   </div>
                   
                   <div className="py-1">
-                    {(navLinks ?? [
-                      { icon: <FiSearch />, label: "Explore", path: "/playground" },
-                      { icon: <FiZap />, label: "Top Up", path: "/topup" },
-                      { icon: <FiTerminal />, label: "Access Keys", path: "/access-keys" },
-                      { icon: <FiLayout />, label: "Teams", path: "/teams" },
-                      { icon: <FiImage />, label: "Gallery", path: "/gallery" },
-                    ]).map((item, i) => (
-                      <Link 
-                        key={i} 
-                        href={item.path}
-                        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-bg-page transition-colors text-[13px] font-semibold text-primary-text"
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
                     <a 
                       href="mailto:support@vadoo.tv"
                       className="w-full flex items-center gap-3 px-4 py-2 hover:bg-bg-page transition-colors text-[13px] font-semibold text-primary-text"
@@ -1209,15 +1201,6 @@ export default function CreativeCanvas({
                       <div className={`w-8 h-4 rounded-full relative transition-colors ${resolvedTheme === "dark" ? "bg-primary" : "bg-bg-card-hover"}`}>
                         <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-black dark:bg-white transition-all ${resolvedTheme === "dark" ? "left-4.5" : "left-0.5"}`} />
                       </div>
-                    </button>
-                    
-                    <div className="h-px bg-divider w-full my-1" />
-                    
-                    <button 
-                      onClick={() => { logout(); setOpenProfile(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-500/10 transition-colors text-[13px] font-bold text-red-500"
-                    >
-                      Sign out
                     </button>
                   </div>
                 </div>
@@ -1276,7 +1259,7 @@ export default function CreativeCanvas({
             </div>
             <div className="flex items-center gap-1">
               <Link 
-                href="/docs/design-agent-api" 
+                href="https://muapi.ai/docs/design-agent-api" 
                 target="_blank"
                 className="p-1.5 hover:bg-bg-page hover:text-primary-text transition-colors rounded text-secondary-text"
                 title="API Docs"
@@ -1287,7 +1270,7 @@ export default function CreativeCanvas({
                 <button
                   onClick={() => {
                     if (inEmbedMode) setActiveEmbedSession(null);
-                    else router.push("/assistant/canvas");
+                    else router.push("/canvas");
                   }}
                   className="p-1.5 hover:bg-bg-page hover:text-primary-text transition-colors rounded text-secondary-text"
                   title="New Session"
@@ -1639,7 +1622,8 @@ export default function CreativeCanvas({
                             <h3 className="text-[12px] font-bold text-primary-text uppercase tracking-tight">Expert Skills</h3>
                           </div>
                           <Link 
-                            href="/docs/design-agent-api" 
+                            href="https://muapi.ai/docs/design-agent-api"
+                            target="_blank" 
                             className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
                           >
                             <CgTerminal size={10} />
