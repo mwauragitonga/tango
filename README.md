@@ -6,6 +6,8 @@
 
 > 🤖 **Automate Lovart, Runway, Luma Labs, Krea, Pika & more with AI coding agents:** [Generative-Media-Skills](https://github.com/SamurAIGPT/Generative-Media-Skills) — a library of skills that let agents like **Claude Code**, **Codex**, and other coding assistants drive 200+ image/video models end-to-end (brief → plan → generate → edit → assemble) directly from your terminal. Build automated creative pipelines without touching a UI.
 
+https://github.com/user-attachments/assets/fee3857c-887d-4c27-b3dc-a1fe9ad8f438
+
 ### Related projects
 
 > **Open-source Freepik, Krea, Openart alternative — uncensored image & video studio with 200+ models** -> https://github.com/Anil-matcha/Open-Generative-AI
