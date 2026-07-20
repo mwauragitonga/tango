@@ -1,4 +1,6 @@
-"""Channel router — maps (workspace_id, channel_id) to an AgentSession and runs the loop."""
+"""Channel router — task-lease oriented; channel lock only for inline turns."""
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -6,16 +8,15 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from tagopen.agent.loop import run_agent_loop
+from tagopen.gateway.users import get_display_name
 from tagopen.memory.store import get_store
+from tagopen.tasks.store import get_task_store
 
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
 
 logger = logging.getLogger(__name__)
 
-# In-memory session registry: (workspace_id, channel_id) → AgentSession
-# The key insight vs OpenClaw: session key includes channel_id, NOT user_id.
-# All users in a channel share the same session.
 _sessions: dict[tuple[str, str], "AgentSession"] = {}
 
 
@@ -23,11 +24,8 @@ _sessions: dict[tuple[str, str], "AgentSession"] = {}
 class AgentSession:
     workspace_id: str
     channel_id: str
-    # Shared lock so concurrent @mentions in the same channel are serialized
-    # preventing context corruption from parallel writes.
+    # Inline Q&A still serialized lightly; durable tasks use DB leases instead.
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
-
 
 
 def get_or_create_session(workspace_id: str, channel_id: str) -> AgentSession:
@@ -46,22 +44,20 @@ async def route_message(
     text: str,
     thread_ts: str,
     event_ts: str,
+    event_id: str | None = None,
 ) -> None:
+    task_store = await get_task_store(workspace_id)
+    event_key = event_id or f"{channel_id}:{event_ts}"
+    first = await task_store.claim_slack_event(workspace_id, event_key)
+    if not first:
+        logger.info("Duplicate Slack event ignored: %s", event_key)
+        return
+
     session = get_or_create_session(workspace_id, channel_id)
     store = await get_store(workspace_id, channel_id)
+    display_name = await get_display_name(app, user_id)
 
-    # Fetch user display name for attribution in context
-    try:
-        user_info = await app.client.users_info(user=user_id)
-        display_name = (
-            user_info["user"].get("profile", {}).get("display_name")
-            or user_info["user"].get("real_name")
-            or user_id
-        )
-    except Exception:
-        display_name = user_id
-
-    # Serialize per-channel — prevents race conditions on shared context
+    # Durable path releases quickly; lock only wraps dispatch start
     async with session._lock:
         await run_agent_loop(
             app=app,

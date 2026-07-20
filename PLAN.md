@@ -1,8 +1,10 @@
-# TagOpen — Open Source Claude Tag Alternative
+# TagOpen / Tango — Open Source Claude Tag Alternative
 > Self-hostable, channel-native AI teammate for Slack (and beyond)
 
-**Last updated:** 2026-06-25  
-**Status:** Pre-build planning
+**Last updated:** 2026-07-20  
+**Status:** Coworker runtime implemented on the Tango fork — see [docs/COWORKER-RUNTIME-STATUS.md](docs/COWORKER-RUNTIME-STATUS.md)
+
+> Historical planning notes below. Prefer `docs/TASK-RUNTIME.md`, `docs/CONTEXT-MEMORY.md`, `docs/TOOL-POLICY.md`, `docs/AMBIENT-RUNTIME.md`, and `docs/LITELLM-PROXY.md` for current behavior.
 
 ---
 

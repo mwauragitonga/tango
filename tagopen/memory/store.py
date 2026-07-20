@@ -1,62 +1,16 @@
-"""SQLite + FTS5 message store — one DB per workspace, one table per channel."""
+"""SQLite + FTS5 message store — one DB per workspace."""
 
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from pathlib import Path
 
 import aiosqlite
 
 from tagopen.config import settings
+from tagopen.db.connection import open_workspace_db
 
 logger = logging.getLogger(__name__)
-
-_CREATE_MESSAGES = """
-CREATE TABLE IF NOT EXISTS messages (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts          TEXT NOT NULL,
-    thread_ts   TEXT,
-    channel_id  TEXT NOT NULL,
-    role        TEXT NOT NULL,          -- 'user' | 'assistant'
-    user_id     TEXT NOT NULL,
-    display_name TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    tool_calls  INTEGER DEFAULT 0,
-    created_at  REAL NOT NULL DEFAULT (unixepoch('now', 'subsec'))
-);
-"""
-
-_CREATE_FTS = """
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-    content,
-    display_name,
-    content='messages',
-    content_rowid='id'
-);
-"""
-
-_CREATE_TRIGGERS = """
-CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-    INSERT INTO messages_fts(rowid, content, display_name)
-    VALUES (new.id, new.content, new.display_name);
-END;
-
-CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-    INSERT INTO messages_fts(messages_fts, rowid, content, display_name)
-    VALUES ('delete', old.id, old.content, old.display_name);
-END;
-"""
-
-_CREATE_THREAD_MODELS = """
-CREATE TABLE IF NOT EXISTS thread_models (
-    channel_id  TEXT NOT NULL,
-    thread_ts   TEXT NOT NULL,
-    model       TEXT NOT NULL,
-    updated_at  REAL NOT NULL DEFAULT (unixepoch('now', 'subsec')),
-    PRIMARY KEY (channel_id, thread_ts)
-);
-"""
 
 
 class MessageStore:
@@ -66,15 +20,12 @@ class MessageStore:
         self._db: aiosqlite.Connection | None = None
 
     async def open(self) -> None:
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(self._db_path)
-        self._db.row_factory = aiosqlite.Row
-        await self._db.execute("PRAGMA journal_mode=WAL")
-        await self._db.execute("PRAGMA foreign_keys=ON")
-        await self._db.executescript(
-            _CREATE_MESSAGES + _CREATE_FTS + _CREATE_TRIGGERS + _CREATE_THREAD_MODELS
-        )
-        await self._db.commit()
+        self._db = await open_workspace_db(self._db_path)
+
+    @property
+    def db(self) -> aiosqlite.Connection:
+        assert self._db is not None
+        return self._db
 
     async def add_message(
         self,
@@ -86,31 +37,45 @@ class MessageStore:
         thread_ts: str | None = None,
         tool_calls: int = 0,
     ) -> None:
-        assert self._db
-        await self._db.execute(
+        await self.db.execute(
             """INSERT INTO messages (ts, thread_ts, channel_id, role, user_id, display_name, content, tool_calls)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (ts, thread_ts, self._channel_id, role, user_id, display_name, content, tool_calls),
         )
-        await self._db.commit()
+        await self.db.commit()
 
-    async def get_recent_messages(self, limit: int = 50) -> list[aiosqlite.Row]:
-        assert self._db
-        async with self._db.execute(
-            """SELECT ts, role, user_id, display_name, content
-               FROM messages
-               WHERE channel_id = ?
-               ORDER BY created_at DESC
-               LIMIT ?""",
-            (self._channel_id, limit),
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return list(reversed(rows))  # return chronologically
+    async def get_recent_messages(
+        self, limit: int = 50, thread_ts: str | None = None
+    ) -> list[aiosqlite.Row]:
+        """Recent messages ordered by autoincrement id (deterministic).
+
+        When thread_ts is set, scope to that thread (parent + replies).
+        """
+        if thread_ts:
+            async with self.db.execute(
+                """SELECT ts, role, user_id, display_name, content, thread_ts
+                   FROM messages
+                   WHERE channel_id = ?
+                     AND (thread_ts = ? OR ts = ?)
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (self._channel_id, thread_ts, thread_ts, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        else:
+            async with self.db.execute(
+                """SELECT ts, role, user_id, display_name, content, thread_ts
+                   FROM messages
+                   WHERE channel_id = ?
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (self._channel_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return list(reversed(rows))
 
     async def search(self, query: str, limit: int = 10) -> list[aiosqlite.Row]:
-        """Full-text search across channel messages."""
-        assert self._db
-        async with self._db.execute(
+        async with self.db.execute(
             """SELECT m.ts, m.role, m.display_name, m.content
                FROM messages_fts f
                JOIN messages m ON m.id = f.rowid
@@ -122,8 +87,7 @@ class MessageStore:
             return await cursor.fetchall()
 
     async def get_thread_model(self, thread_ts: str) -> str | None:
-        assert self._db
-        async with self._db.execute(
+        async with self.db.execute(
             """SELECT model FROM thread_models
                WHERE channel_id = ? AND thread_ts = ?""",
             (self._channel_id, thread_ts),
@@ -132,8 +96,7 @@ class MessageStore:
         return row["model"] if row else None
 
     async def set_thread_model(self, thread_ts: str, model: str) -> None:
-        assert self._db
-        await self._db.execute(
+        await self.db.execute(
             """INSERT INTO thread_models (channel_id, thread_ts, model)
                VALUES (?, ?, ?)
                ON CONFLICT(channel_id, thread_ts) DO UPDATE SET
@@ -141,19 +104,19 @@ class MessageStore:
                  updated_at = unixepoch('now', 'subsec')""",
             (self._channel_id, thread_ts, model),
         )
-        await self._db.commit()
+        await self.db.commit()
 
     async def clear_thread_model(self, thread_ts: str) -> None:
-        assert self._db
-        await self._db.execute(
+        await self.db.execute(
             """DELETE FROM thread_models WHERE channel_id = ? AND thread_ts = ?""",
             (self._channel_id, thread_ts),
         )
-        await self._db.commit()
+        await self.db.commit()
 
     async def close(self) -> None:
         if self._db:
             await self._db.close()
+            self._db = None
 
 
 _stores: dict[tuple[str, str], MessageStore] = {}

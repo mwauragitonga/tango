@@ -1,19 +1,19 @@
-# Changelog (Tango fork)
+## [Unreleased] — Coworker runtime (100X)
 
-## 2026-07-20
+### Added
+- Durable task kernel: states, leases, checkpoints, `task_*` tools, completion verification, worker resume
+- Context engine with token-aware compaction and thread-scoped history
+- Layered memory (`memories` table + Mem0 hook) with provenance gates; atomic MEMORY.md writes
+- Skill lifecycle: semantic match, usage stats, validated auto-create, weekly curator
+- Tool policy executor: HITL Slack approvals, audit hashes, MCP session pooling + HTTP/SSE, Python sandbox
+- Hardened LiteLLM Proxy deploy scaffold (aliases, Redis, salt key, key provisioning, spend reconcile)
+- Ambient enqueue-only APScheduler + heartbeat/stale-thread observation
+- SaaS tenancy: HTTP Events + OAuth, encrypted workspace credentials, Temporal adapter stub
+- Docs: TASK-RUNTIME, CONTEXT-MEMORY, TOOL-POLICY, AMBIENT-RUNTIME, COWORKER-RUNTIME-STATUS, RUNBOOK
+- Unit/integration tests for tasks, store, policy, context, ambient, restart recovery
 
-Fork lineage: [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) → maintained at [mwauragitonga/tango](https://github.com/mwauragitonga/tango).
-
-### Fixes
-
-- **Crash:** import `asyncio` in `tagopen/gateway/router.py`.
-- **Slack mrkdwn:** `tagopen/slack_format.py` + convert in `agent/loop.py`; strip `[ts @agent]` prefixes.
-- **Web search:** replace DuckDuckGo Instant Answer with multi-provider search (`ddgs` default; optional Tavily/Brave/Serper/Firecrawl).
-
-### Features
-
-- **MCP client:** stdio MCP servers from channel `tools.toml` (list + call).
-- **Org KB example:** `examples/mcp/org_kb_server.py` + `data/org/ORG.md`.
-- **ORG.md / PERSONALITY.md** in system prompt.
-- **Contabo-only Hermes bridge:** `examples/mcp/hermes_bridge_server.py` + [docs/HERMES-MCP.md](docs/HERMES-MCP.md).
-- **SaaS roadmap:** [docs/SAAS-ROADMAP.md](docs/SAAS-ROADMAP.md).
+### Fixed
+- `search_channel_history` now searches FTS instead of echoing args
+- Deterministic message ordering by autoincrement id
+- Strip bot mention before classification; thread replies for approvals/resume
+- Remove memory-writer ↔ loop circular import

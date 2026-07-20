@@ -8,7 +8,8 @@ Override order (highest wins):
   2. tools.toml [llm] model = "..." in channel dir
   3. LLM_MODEL env / settings.llm_model
 
-Failover: LLM_FALLBACKS is turn-local only (never sticky).
+Failover: LLM_FALLBACKS is turn-local only (never sticky). Prefer Proxy routing when
+settings.llm_use_app_fallbacks is False.
 """
 
 from __future__ import annotations
@@ -24,11 +25,8 @@ from tagopen.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Suppress LiteLLM's verbose success logs
 litellm.suppress_debug_info = True
 
-# In-process thread overrides: (channel_id, thread_ts) -> model
-# Persisted via MessageStore; this cache avoids a DB round-trip every tool round.
 _thread_model_cache: dict[tuple[str, str], str] = {}
 
 
@@ -39,6 +37,11 @@ def configure() -> None:
     _set_if_nonempty("OPENAI_API_BASE", settings.openai_api_base)
     _set_if_nonempty("GEMINI_API_KEY", settings.gemini_api_key)
     _set_if_nonempty("GROQ_API_KEY", settings.groq_api_key)
+    if settings.litellm_proxy_url:
+        # Prefer Proxy as OpenAI-compatible base when configured
+        _set_if_nonempty("OPENAI_API_BASE", settings.litellm_proxy_url)
+        if settings.litellm_proxy_key:
+            os.environ["OPENAI_API_KEY"] = settings.litellm_proxy_key
 
     logger.info("LLM configured — default model: %s", settings.llm_model)
     _log_available_providers()
@@ -59,6 +62,8 @@ def _log_available_providers() -> None:
         providers.append("Gemini")
     if os.environ.get("GROQ_API_KEY"):
         providers.append("Groq")
+    if settings.litellm_proxy_url:
+        providers.append(f"LiteLLM Proxy ({settings.litellm_proxy_url})")
     if providers:
         logger.info("Available LLM providers: %s", ", ".join(providers))
     else:
@@ -85,7 +90,6 @@ def resolve_model(
     thread_ts: str | None = None,
     thread_override: str | None = None,
 ) -> str:
-    """Return the model to use for this turn."""
     if thread_override:
         return thread_override
     if channel_id and thread_ts:
@@ -111,7 +115,6 @@ def _channel_model_override(channel_id: str) -> str | None:
 
 
 def set_channel_model(channel_id: str, model: str) -> None:
-    """Pin channel default model in tools.toml [llm].model."""
     path = settings.channels_dir / channel_id / "tools.toml"
     config: dict[str, Any] = {}
     if path.exists():
@@ -121,7 +124,8 @@ def set_channel_model(channel_id: str, model: str) -> None:
             config = {}
     config.setdefault("llm", {})["model"] = model
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(toml.dumps(config))
+    from tagopen.memory.files import atomic_write_text
+    atomic_write_text(path, toml.dumps(config))
 
 
 def clear_channel_model(channel_id: str) -> None:
@@ -139,7 +143,8 @@ def clear_channel_model(channel_id: str) -> None:
             config["llm"] = llm
         else:
             config.pop("llm", None)
-        path.write_text(toml.dumps(config))
+        from tagopen.memory.files import atomic_write_text
+        atomic_write_text(path, toml.dumps(config))
 
 
 def describe_model_stack(channel_id: str, thread_ts: str | None = None) -> str:
@@ -152,10 +157,12 @@ def describe_model_stack(channel_id: str, thread_ts: str | None = None) -> str:
         f"*Channel pin:* `{channel or '(none)'}`",
         f"*Thread override:* `{thread or '(none)'}`",
     ]
-    if settings.fallback_models:
+    if settings.fallback_models and settings.llm_use_app_fallbacks:
         lines.append("*Fallbacks (turn-local):* " + ", ".join(f"`{m}`" for m in settings.fallback_models))
     if settings.model_allowlist:
         lines.append("*Allowlist:* " + ", ".join(f"`{m}`" for m in settings.model_allowlist))
+    if settings.litellm_proxy_url:
+        lines.append(f"*Proxy:* `{settings.litellm_proxy_url}`")
     lines.append(
         "Switch: `model <id>` · reset thread: `model reset` · pin channel: `model channel <id>`"
     )
@@ -168,7 +175,6 @@ async def acompletion(
     thread_override: str | None = None,
     **kwargs,
 ):
-    """Thin wrapper — injects resolved model (no failover)."""
     kwargs.setdefault(
         "model",
         resolve_model(channel_id, thread_ts, thread_override=thread_override),
@@ -182,16 +188,13 @@ async def acompletion_with_failover(
     thread_override: str | None = None,
     **kwargs,
 ) -> tuple[Any, str | None]:
-    """Try primary then LLM_FALLBACKS. Failover is turn-local (never sticky).
-
-    Returns (response, slack_notice_or_None).
-    """
+    """Try primary then LLM_FALLBACKS when app-level fallbacks are enabled."""
     primary = resolve_model(channel_id, thread_ts, thread_override=thread_override)
     chain = [primary]
-    for fb in settings.fallback_models:
-        if fb not in chain:
-            chain.append(fb)
-
+    if settings.llm_use_app_fallbacks:
+        for fb in settings.fallback_models:
+            if fb not in chain:
+                chain.append(fb)
     last_err: Exception | None = None
     for i, model in enumerate(chain):
         try:
@@ -207,3 +210,5 @@ async def acompletion_with_failover(
             logger.warning("LLM model %s failed: %s", model, e)
     assert last_err is not None
     raise last_err
+
+

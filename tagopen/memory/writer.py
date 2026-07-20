@@ -1,15 +1,13 @@
-"""Memory curation turn — inner loop (Letta-inspired).
-
-After the agent replies, it gets one more LLM call to decide what
-(if anything) to write to MEMORY.md. This keeps memory clean and
-agent-curated rather than a noisy append-only log.
-"""
+"""Memory curation + atomic MEMORY.md writes (no circular import with loop)."""
 
 from __future__ import annotations
 
+import json
 import logging
 
+from tagopen.config import settings
 from tagopen.llm import acompletion
+from tagopen.memory.files import memory_append, memory_replace
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +63,27 @@ _MEMORY_TOOLS = [
 ]
 
 
+def apply_memory_tool(channel_id: str, fn_name: str, args: dict) -> None:
+    memory_path = settings.channels_dir / channel_id / "MEMORY.md"
+    if fn_name == "memory_append":
+        memory_append(memory_path, args.get("content", ""))
+    elif fn_name == "memory_replace":
+        memory_replace(memory_path, args.get("old", ""), args.get("new", ""))
+
+
 async def run_memory_curation(
     channel_id: str,
     system_prompt: str,
     messages: list[dict],
     final_reply: str,
+    thread_ts: str | None = None,
 ) -> None:
     try:
         response = await acompletion(
             channel_id=channel_id,
+            thread_ts=thread_ts,
             messages=[
                 {"role": "system", "content": _CURATION_PROMPT},
-                # Provide the last few turns as context
                 *messages[-6:],
                 {"role": "assistant", "content": final_reply},
             ],
@@ -88,14 +95,11 @@ async def run_memory_curation(
         if not msg.tool_calls:
             return
 
-        import json
-        from tagopen.agent.loop import _handle_memory_tool
-
         for tc in msg.tool_calls:
             fn_name = tc.function.name
             fn_args = json.loads(tc.function.arguments or "{}")
             if fn_name in ("memory_append", "memory_replace"):
-                _handle_memory_tool(channel_id, fn_name, fn_args)
+                apply_memory_tool(channel_id, fn_name, fn_args)
                 logger.info("Memory updated via curation: %s in channel=%s", fn_name, channel_id)
 
     except Exception:

@@ -1,5 +1,38 @@
-# Example model aliases for SaaS — edit per deployment.
+# Hardened LiteLLM Proxy for Tango (Contabo localhost proving ground / SaaS shared).
+# Pin image digest in docker-compose; never use main-latest in production.
+
 model_list:
+  - model_name: tango-primary
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 120
+      num_retries: 1
+
+  - model_name: tango-fast
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 60
+      num_retries: 1
+
+  - model_name: tango-reasoning
+    litellm_params:
+      model: openai/gpt-5.4
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 180
+      num_retries: 1
+
+  - model_name: tango-summary
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 60
+
+  # Keep explicit non-gpt-4o-mini fallbacks only
   - model_name: kimi-k2.7-code
     litellm_params:
       model: openai/kimi-k2.7-code
@@ -11,9 +44,46 @@ model_list:
       model: openai/gpt-5.4
       api_key: os.environ/OPENAI_API_KEY
 
+router_settings:
+  redis_host: os.environ/REDIS_HOST
+  redis_port: os.environ/REDIS_PORT
+  redis_password: os.environ/REDIS_PASSWORD
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  timeout: 120
+  cooldown_time: 60
+  allowed_fails: 2
+  fallbacks:
+    - tango-primary: [tango-reasoning]
+    - kimi-k2.7-code: [gpt-5.4]
+
 litellm_settings:
   drop_params: true
   set_verbose: false
+  request_timeout: 120
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+    password: os.environ/REDIS_PASSWORD
+  success_callback: ["prometheus"]
+  failure_callback: ["prometheus"]
+  # Do not export prompt bodies to third-party telemetry
+  turn_off_message_logging: true
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+  # Permanent salt — set once before storing provider credentials; never rotate
+  # LITELLM_SALT_KEY is read from environment by Proxy
+  store_model_in_db: true
+  disable_spend_logs: false
+  allow_user_auth: true
+  enforce_user_param: true
+
+# Custom pricing stubs so spend is never silently zero for unpriced models
+model_info:
+  - model_name: tango-primary
+    max_tokens: 128000
+  - model_name: kimi-k2.7-code
+    max_tokens: 128000

@@ -24,7 +24,8 @@
 > **Tango fork** — maintained at [mwauragitonga/tango](https://github.com/mwauragitonga/tango).  
 > Slack bot display name: **Tango**. Ops runbook (credentials, Contabo systemd): keep in your devops monorepo `apps/open-claude-tag/`.  
 > **Architecture:** standalone Slack Bolt + LiteLLM + SQLite — **not** OpenClaw or Hermes under the hood. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/BORROWED-PATTERNS.md](docs/BORROWED-PATTERNS.md), and [CHANGELOG.md](CHANGELOG.md).  
-> Contabo uses LiteLLM **SDK**; SaaS multi-tenant adds [LiteLLM Proxy](docs/LITELLM-PROXY.md).  
+> **Coworker runtime:** durable tasks, context engine, tool policy, ambient enqueue, SaaS HTTP/OAuth — see [docs/COWORKER-RUNTIME-STATUS.md](docs/COWORKER-RUNTIME-STATUS.md), [docs/TASK-RUNTIME.md](docs/TASK-RUNTIME.md).  
+> Contabo can use LiteLLM **SDK** or localhost [LiteLLM Proxy](docs/LITELLM-PROXY.md) for spend attribution.  
 > Upstream lineage: [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) (MIT).
 
 ---

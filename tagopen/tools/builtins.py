@@ -150,10 +150,15 @@ async def dispatch_builtin(
     if fn_name == "web_search":
         return await search_web(args["query"])
     if fn_name == "run_python":
-        return _run_python(args["code"])
+        from tagopen.tools.sandbox import run_python_sandboxed
+
+        return run_python_sandboxed(args["code"])
     if fn_name == "search_channel_history":
-        # Actual search happens in dispatch_tool after store lookup; return placeholder
-        return args
+        # Prefer ToolExecutor path (has MessageStore). Fallback message if reached here.
+        return (
+            "search_channel_history must be invoked via ToolExecutor with a message store; "
+            f"query={args.get('query')!r}"
+        )
     if fn_name == "skills_list":
         if not channel_id:
             return "skills_list requires a channel context."
@@ -163,34 +168,3 @@ async def dispatch_builtin(
             return "skill_view requires a channel context."
         return skill_view(channel_id, args.get("name", ""))
     return f"Unknown built-in: {fn_name}"
-
-
-def _run_python(code: str) -> str:
-    # Sandboxed Python execution — stdout captured, dangerous builtins removed
-    safe_globals: dict[str, Any] = {
-        "__builtins__": {
-            k: v
-            for k, v in __builtins__.items()  # type: ignore[union-attr]
-            if k not in ("open", "exec", "eval", "__import__", "compile")
-        }
-        if isinstance(__builtins__, dict)
-        else {},
-        "print": print,
-    }
-    import datetime
-    import json
-    import math
-    import re
-
-    safe_globals.update({"math": math, "json": json, "re": re, "datetime": datetime})
-
-    old_stdout = sys.stdout
-    sys.stdout = buffer = StringIO()
-    try:
-        exec(code, safe_globals)  # noqa: S102
-        output = buffer.getvalue()
-        return output.strip() or "(no output)"
-    except Exception as e:
-        return f"Error: {e}"
-    finally:
-        sys.stdout = old_stdout

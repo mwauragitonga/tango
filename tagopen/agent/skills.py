@@ -68,20 +68,13 @@ async def maybe_create_skill(
         if content.strip() == "SKIP":
             return
 
-        # Extract the name from the frontmatter
-        name = "unnamed"
-        for line in content.splitlines():
-            if line.startswith("name:"):
-                name = line.split(":", 1)[1].strip()
-                break
+        from tagopen.agent.skill_lifecycle import curated_create_skill
 
-        skill_path = skills_dir / f"{name}.md"
-        # Don't overwrite existing skills
-        if skill_path.exists():
-            skill_path = skills_dir / f"{name}-{int(__import__('time').time())}.md"
-
-        skill_path.write_text(content)
-        logger.info("Skill created: %s in channel=%s", skill_path.name, channel_id)
+        ok, detail = await curated_create_skill(channel_id, content)
+        if ok:
+            logger.info("Skill created: %s in channel=%s", detail, channel_id)
+        else:
+            logger.info("Skill creation skipped: %s", detail)
 
     except Exception:
         logger.exception("Skill creation failed for channel=%s", channel_id)

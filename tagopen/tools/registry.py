@@ -12,6 +12,8 @@ from typing import Any
 import toml
 
 from tagopen.config import settings
+from tagopen.scheduler.tools import SCHEDULE_TOOL_SCHEMAS
+from tagopen.tasks.tools import TASK_TOOL_SCHEMAS
 from tagopen.tools.builtins import BUILTIN_TOOLS, dispatch_builtin
 from tagopen.tools.catalog import format_tools_catalog
 from tagopen.tools.mcp_client import call_mcp_tool, list_mcp_tools
@@ -43,7 +45,7 @@ async def get_channel_tools(channel_id: str) -> list[dict]:
 
     servers = _load_servers(channel_id)
     mcp_schemas = await list_mcp_tools(servers) if servers else []
-    schemas = list(BUILTIN_TOOLS) + mcp_schemas
+    schemas = list(BUILTIN_TOOLS) + list(TASK_TOOL_SCHEMAS) + list(SCHEDULE_TOOL_SCHEMAS) + mcp_schemas
     by_name = {s["function"]["name"]: s for s in schemas}
     _channel_tool_cache[channel_id] = {
         "servers": servers,
