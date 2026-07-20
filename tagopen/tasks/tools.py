@@ -52,7 +52,17 @@ TASK_TOOL_SCHEMAS: list[dict] = [
                     "step_id": {"type": "string"},
                     "status": {
                         "type": "string",
-                        "enum": ["pending", "in_progress", "completed", "failed", "blocked", "cancelled"],
+                        "enum": [
+                            "pending",
+                            "in_progress",
+                            "completed",
+                            "failed",
+                            "blocked",
+                            "cancelled",
+                        ],
+                        "description": (
+                            "Step status. Use completed (not done) when a step finishes."
+                        ),
                     },
                     "evidence": {"type": "string"},
                     "error": {"type": "string"},
@@ -130,7 +140,14 @@ async def dispatch_task_tool(
 
     if fn_name == "task_update":
         step_id = str(args.get("step_id") or "")
-        status = StepStatus(str(args.get("status") or "pending"))
+        try:
+            status = StepStatus.from_tool_arg(args.get("status"))
+        except ValueError:
+            allowed = ", ".join(s.value for s in StepStatus)
+            return task, (
+                f"Invalid step status {args.get('status')!r}. "
+                f"Use one of: {allowed} (alias: done→completed)."
+            )
         task = await service.update_step(
             task,
             step_id,

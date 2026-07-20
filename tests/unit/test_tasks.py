@@ -78,3 +78,33 @@ def test_classifier():
     assert looks_like_quick_qa("What is the status?")
     assert should_queue_durable("Please implement the migration then deploy and verify")
     assert not should_queue_durable("What time is standup?")
+
+
+def test_step_status_done_alias():
+    assert StepStatus.from_tool_arg("done") == StepStatus.COMPLETED
+    assert StepStatus.from_tool_arg("complete") == StepStatus.COMPLETED
+    assert StepStatus.from_tool_arg("COMPLETED") == StepStatus.COMPLETED
+    assert StepStatus.from_tool_arg("in_progress") == StepStatus.IN_PROGRESS
+    assert StepStatus.from_tool_arg(None) == StepStatus.PENDING
+    with pytest.raises(ValueError):
+        StepStatus.from_tool_arg("nope")
+
+
+@pytest.mark.asyncio
+async def test_task_update_accepts_done_alias(store: SqliteTaskStore):
+    from tagopen.tasks.tools import dispatch_task_tool
+
+    svc = TaskService(store)
+    task = await svc.create_task(
+        workspace_id="W1",
+        channel_id="C1",
+        thread_ts="3.0",
+        requester_user_id="U1",
+        objective="alias canary",
+    )
+    task = await svc.set_plan(task, ["run check", "finish"])
+    task, text = await dispatch_task_tool(
+        svc, task, "task_update", {"step_id": "s1", "status": "done", "evidence": "ok"}
+    )
+    assert task.steps[0].status == StepStatus.COMPLETED
+    assert "Invalid step status" not in text

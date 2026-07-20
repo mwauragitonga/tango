@@ -36,6 +36,24 @@ class StepStatus(str, Enum):
     CANCELLED = "cancelled"
     BLOCKED = "blocked"
 
+    @classmethod
+    def from_tool_arg(cls, value: str | None) -> "StepStatus":
+        """Parse task_update status; accept common aliases like done→completed."""
+        raw = str(value or "pending").strip().lower()
+        aliases = {
+            "done": cls.COMPLETED,
+            "complete": cls.COMPLETED,
+            "finished": cls.COMPLETED,
+            "ok": cls.COMPLETED,
+            "success": cls.COMPLETED,
+            "working": cls.IN_PROGRESS,
+            "progress": cls.IN_PROGRESS,
+            "in-progress": cls.IN_PROGRESS,
+        }
+        if raw in aliases:
+            return aliases[raw]
+        return cls(raw)
+
 
 class ToolRisk(str, Enum):
     READ = "read"
