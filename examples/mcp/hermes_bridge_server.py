@@ -19,10 +19,34 @@ tools.toml:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+
+def _load_dotenv_fallback() -> None:
+    """If systemd/parent did not export HERMES_*, read Tango .env (Contabo path)."""
+    if os.environ.get("HERMES_API_KEY"):
+        return
+    for candidate in (
+        Path(os.environ.get("DATA_DIR", "/opt/apps/open-claude-tag/data")).parent / ".env",
+        Path("/opt/apps/open-claude-tag/.env"),
+        Path(".env"),
+    ):
+        if not candidate.exists():
+            continue
+        for line in candidate.read_text().splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip("\"'")
+            if k.startswith("HERMES_") and k not in os.environ:
+                os.environ[k] = v
+        break
+
+
+_load_dotenv_fallback()
 HERMES_API_URL = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642").rstrip("/")
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
 

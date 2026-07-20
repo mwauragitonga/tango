@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -11,6 +12,14 @@ from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
 logger = logging.getLogger(__name__)
+
+
+def _child_env(extra: dict[str, str] | None) -> dict[str, str]:
+    """Inherit parent env (systemd EnvironmentFile / shell) and merge tools.toml env."""
+    merged = {k: v for k, v in os.environ.items() if isinstance(v, str)}
+    if extra:
+        merged.update({str(k): str(v) for k, v in extra.items()})
+    return merged
 
 
 def _tool_schema_from_mcp(server_name: str, tool: Any, allowed: set[str] | None) -> dict | None:
@@ -47,7 +56,7 @@ async def list_mcp_tools(servers: list[dict[str, Any]]) -> list[dict]:
                 )
             continue
         args = server.get("args") or []
-        env = server.get("env") or None
+        env = _child_env(server.get("env"))
         allowed_list = server.get("allowed_tools")
         allowed = set(allowed_list) if allowed_list else None
         try:
@@ -62,7 +71,7 @@ async def list_mcp_tools(servers: list[dict[str, Any]]) -> list[dict]:
 
 
 async def _list_tools_stdio(
-    command: str, args: list[str], env: dict[str, str] | None
+    command: str, args: list[str], env: dict[str, str]
 ) -> list[Any]:
     params = StdioServerParameters(command=command, args=args, env=env)
     async with AsyncExitStack() as stack:
@@ -87,7 +96,7 @@ async def call_mcp_tool(
     if not command:
         return f"MCP server '{server_name}' has no stdio command."
     args = server.get("args") or []
-    env = server.get("env") or None
+    env = _child_env(server.get("env"))
     try:
         return await _call_tool_stdio(command, args, env, tool_name, arguments)
     except Exception as e:
@@ -98,7 +107,7 @@ async def call_mcp_tool(
 async def _call_tool_stdio(
     command: str,
     args: list[str],
-    env: dict[str, str] | None,
+    env: dict[str, str],
     tool_name: str,
     arguments: dict[str, Any],
 ) -> str:
