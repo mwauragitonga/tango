@@ -27,11 +27,14 @@ Legend:
 | Tool policy + HITL | yes | yes | yes | partial | `tools/policy.py`; thread `approve\|deny <id>`; canary pause/resume |
 | MCP pool + HTTP/SSE | yes | yes | yes (stdio) | partial | `tools/mcp_client.py`; Contabo org_kb / hermes stdio |
 | LiteLLM gateway + usage rows | yes | yes | yes | partial | `llm/gateway.py` → `llm_usage`; Contabo still **SDK** not Proxy |
+| LiteLLM streaming + first-token hook | yes | yes | **yes** | partial | `LLM_STREAM` default true; `on_first_token` → `speech_balloon`; canary 2026-07-21 |
+| Slack chunked posts | yes | yes | **yes** | yes | `slack_post.py`; canary `CHUNK_OK` |
+| Per-tool Slack status | yes | yes | **yes** | yes | `slack_status.py`; tool canary used `web_search` (Nairobi weather) |
 | LiteLLM Proxy deploy | yes | **no** | no | scaffold | `deploy/litellm-proxy/`; image digest still placeholder |
 | Ambient enqueue scheduler | yes | yes | partial | partial | `scheduler/service.py` memory job store; SQLite `schedules` |
 | SaaS HTTP Events + OAuth | yes | via `SLACK_MODE=http` | no | **scaffold** | `tenancy/http_app.py`; export/delete stubs |
 | Temporal adapter | yes | **no** | no | no | `scheduler/temporal_adapter.py`; `start_temporal_worker` **never called** from gateway |
-| Unit / integration tests | yes | yes | n/a | n/a | `tests/` — 24 collected locally |
+| Unit / integration tests | yes | yes | n/a | n/a | `tests/` — 36 collected locally |
 
 ## Contabo canary (durable kernel)
 
@@ -40,6 +43,8 @@ Verified 2026-07-21 in `#all-toshius-klay` (team `T09P6EA3D3N`):
 - Multi-step durable ack/progress/complete (`tsk_0676`)
 - Thread `@Tango status`
 - Pause / resume mid-run (`tsk_1ef7`)
+- Deploy tip `7366f3b`+: stream/chunk canary (`STREAM_OK` / `CHUNK_OK`, durable ack `tsk_8efb`); `web_search` weather reply in-thread
+- Tip after deploy: `/opt/apps/open-claude-tag` @ `7366f3b` (plus follow-up reaction cleanup if present)
 
 Bare `status` without `@Tango` does **not** route (mentions / `approve|deny` / resume only on `message` events).
 

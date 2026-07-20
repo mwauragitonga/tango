@@ -1,3 +1,9 @@
+## [Unreleased] — Slack stream + chunk UX
+
+- Stream LiteLLM agent completions by default (`LLM_STREAM`); Slack `speech_balloon` on first token
+- Chunk long Slack replies; per-tool status reactions; multi-file delivery prompt rules
+- Contabo canary (`#all-toshius-klay`): `STREAM_OK` / `CHUNK_OK`, `web_search` → `SEARCH_OK` (2026-07-21)
+
 ## [Unreleased] — Docs honesty pass
 
 - Rewrite `docs/COWORKER-RUNTIME-STATUS.md` (code / wired / Contabo-verified / SaaS-ready)

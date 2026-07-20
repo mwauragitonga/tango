@@ -56,12 +56,23 @@ async def handle_mention(event: dict, say, client) -> None:
             thread_ts=thread_ts,
         )
     finally:
+        # SlackStatus.finish() may already have cleared thinking_face — treat
+        # no_reaction as success; only log unexpected Slack errors.
         try:
             await client.reactions_remove(
                 channel=channel_id, timestamp=event["ts"], name="thinking_face"
             )
-        except Exception:
-            logger.exception("Failed to remove thinking_face reaction in %s", channel_id)
+        except Exception as e:
+            err = ""
+            resp = getattr(e, "response", None)
+            if resp is not None:
+                data = getattr(resp, "data", None) or {}
+                if isinstance(data, dict):
+                    err = str(data.get("error") or "")
+            if err == "no_reaction" or "no_reaction" in str(e):
+                logger.debug("thinking_face already removed in %s", channel_id)
+            else:
+                logger.exception("Failed to remove thinking_face reaction in %s", channel_id)
 
 
 @app.event("message")

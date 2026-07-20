@@ -20,6 +20,13 @@
 2. If down: set `LLM_USE_APP_FALLBACKS=true` temporarily and point `OPENAI_API_BASE` back to provider
 3. Do not rotate `LITELLM_SALT_KEY`
 
+## Slack mid-run UX (Contabo)
+
+- Mentions: `thinking_face` → first token `speech_balloon` → tool emoji → clear on finish
+- Long replies: chunked via `tagopen/slack_post.py`
+- Disable streaming: `LLM_STREAM=false` in `.env`, then `systemctl restart open-claude-tag`
+- Canary channel: `#all-toshius-klay` (`C09P2TTBYV8`)
+
 ## Rollback
 
 1. `systemctl stop open-claude-tag`
