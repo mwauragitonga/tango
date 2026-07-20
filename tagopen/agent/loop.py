@@ -114,10 +114,3 @@ async def run_agent_loop(
         event_ts=event_ts,
         store=store,
     )
-
-
-# Back-compat for memory writer / tests
-def _handle_memory_tool(channel_id: str, fn_name: str, args: dict) -> None:
-    from tagopen.memory.writer import apply_memory_tool
-
-    apply_memory_tool(channel_id, fn_name, args)

@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
 from tagopen.agent.context import build_system_prompt
+from tagopen.agent.skill_lifecycle import format_match_hint
 from tagopen.config import settings
 from tagopen.memory.store import MessageStore
 from tagopen.tasks.models import Task
@@ -42,15 +42,6 @@ class ContextEngine:
             return False
         return self.usage.prompt_tokens >= int(self.usage.context_window * self.compact_threshold)
 
-    def status(self) -> dict[str, Any]:
-        return {
-            "prompt_tokens": self.usage.prompt_tokens,
-            "completion_tokens": self.usage.completion_tokens,
-            "total_tokens": self.usage.total_tokens,
-            "context_window": self.usage.context_window,
-            "should_compact": self.should_compact(),
-        }
-
     async def build_context(
         self,
         *,
@@ -66,14 +57,9 @@ class ContextEngine:
         compaction_summaries: list[str] | None = None,
     ) -> tuple[str, list[dict]]:
         system = build_system_prompt(channel_id, user_map, tool_schemas=tool_schemas)
-        try:
-            from tagopen.agent.skill_lifecycle import format_match_hint
-
-            hint = format_match_hint(channel_id, current_text)
-            if hint:
-                system += "\n\n---\n\n" + hint
-        except Exception:
-            pass
+        hint = format_match_hint(channel_id, current_text)
+        if hint:
+            system += "\n\n---\n\n" + hint
         if task:
             system += (
                 "\n\n---\n\n## Active durable task\n\n"
@@ -103,7 +89,6 @@ class ContextEngine:
                 content = f"[{ts_str} @{name}] {content}"
             messages.append({"role": role, "content": content})
 
-        # Protect last six exchanges: already in recent; ensure current turn present
         messages.append({"role": "user", "content": f"[@{current_user}] {current_text}"})
         return system, messages
 
@@ -144,11 +129,7 @@ class ContextEngine:
             },
         ]
         try:
-            summary_ctx = ctx
-            if hasattr(ctx, "purpose"):
-                from dataclasses import replace
-
-                summary_ctx = replace(ctx, purpose="summary")
+            summary_ctx = replace(ctx, purpose="summary")
             resp, _ = await llm_complete(summary_ctx, messages=prompt)
             summary = resp.choices[0].message.content or ""
         except Exception:
@@ -172,11 +153,4 @@ class ContextEngine:
             )
             await task_store.db.commit()
 
-        rebuilt = [
-            {
-                "role": "system",
-                "content": f"[Earlier context summary]\n{summary}",
-            }
-        ] + keep_tail
-        # Note: system message in messages list is unusual; caller should merge into prompt
         return keep_tail, summary

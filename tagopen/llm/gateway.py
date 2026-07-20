@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import litellm
@@ -14,15 +14,10 @@ from tagopen.config import settings
 from tagopen.llm.client import resolve_model
 from tagopen.tasks.models import UsageRecord, new_id
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from tagopen.tasks.store import SqliteTaskStore
 
-# Authoritative tags clients must NOT override — derived from workspace key / control plane
-_PROTECTED_META_KEYS = {
-    "workspace_id",
-    "tenant_id",
-    "environment",
-    "plan",
-}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -83,7 +78,7 @@ async def complete(
     messages: list[dict],
     tools: list[dict] | None = None,
     tool_choice: str | None = None,
-    task_store: Any | None = None,
+    task_store: SqliteTaskStore | None = None,
     use_proxy_fallbacks: bool | None = None,
     **kwargs: Any,
 ) -> tuple[Any, str | None]:
@@ -91,11 +86,6 @@ async def complete(
     model = kwargs.pop("model", None) or resolve_model(ctx.channel_id, ctx.thread_ts)
     meta = build_metadata(ctx)
     kwargs["metadata"] = {**(kwargs.get("metadata") or {}), **meta}
-    # Reject client attempts to override protected keys in metadata if passed oddly
-    for k in _PROTECTED_META_KEYS:
-        if k in (kwargs.get("metadata") or {}) and k != "workspace_id":
-            # workspace_id is set by us from ctx
-            pass
     kwargs.setdefault("timeout", settings.llm_timeout_seconds)
 
     use_app_fallbacks = (

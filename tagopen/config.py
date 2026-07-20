@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     slack_signing_secret: str = ""
     slack_client_id: str = ""
     slack_client_secret: str = ""
+    http_port: int = 3000
 
     # LLM — LiteLLM model string
     llm_model: str = "claude-sonnet-4-6"

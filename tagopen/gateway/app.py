@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
+from tagopen.agent.loop import strip_bot_mention
 from tagopen.config import settings
 from tagopen.gateway.router import route_message
+from tagopen.memory.store import get_store
+from tagopen.scheduler.service import start_scheduler
 from tagopen.tasks.service import TaskService
 from tagopen.tasks.store import get_task_store
 from tagopen.tasks.worker import get_worker
-from tagopen.scheduler.service import start_scheduler
-from tagopen.agent.loop import strip_bot_mention
+from tagopen.tools.executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ async def handle_mention(event: dict, say, client) -> None:
                 channel=channel_id, timestamp=event["ts"], name="thinking_face"
             )
         except Exception:
-            pass
+            logger.exception("Failed to remove thinking_face reaction in %s", channel_id)
 
 
 @app.event("message")
@@ -95,14 +98,7 @@ async def handle_message(event: dict, client) -> None:
             return
         svc = TaskService(store)
         if action == "approve":
-            # Re-dispatch the tool with preauth via resume
-            from tagopen.tools.executor import ToolExecutor
-            from tagopen.memory.store import get_store
-            import json
-
             args = json.loads(row["args_json"])
-            # Temporarily allow via channel policy preauth flag on executor path:
-            # mark resume and inject one-shot preauthorized execution
             task = await svc.resume(task)
             msg_store = await get_store(workspace_id, channel_id)
             executor = ToolExecutor(
@@ -116,7 +112,6 @@ async def handle_message(event: dict, client) -> None:
                 channel_policy={"auto_approve_writes": True},
                 message_store=msg_store,
             )
-            # Force risk path: decide() with auto_approve
             result = await executor.execute(row["tool_name"], args)
             await client.chat_postMessage(
                 channel=channel_id,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from datetime import timedelta
 
 from tagopen.config import settings
 
@@ -56,7 +56,7 @@ async def start_temporal_worker() -> None:
             return await workflow.execute_activity(
                 tango_run_task,
                 args=[task_id, workspace_id],
-                start_to_close_timeout=__import__("datetime").timedelta(hours=2),
+                start_to_close_timeout=timedelta(hours=2),
             )
 
     worker = Worker(

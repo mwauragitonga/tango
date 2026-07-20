@@ -49,10 +49,6 @@ class TaskWorker:
     async def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                # Requeue expired leases across known workspaces is deferred;
-                # Contabo single-workspace: scan data/workspaces/*
-                from pathlib import Path
-
                 root = settings.data_dir / "workspaces"
                 if root.exists():
                     for ws_dir in root.iterdir():
@@ -129,28 +125,18 @@ class TaskWorker:
             if task.status in TERMINAL_STATUSES:
                 return
 
+            system, built = await engine.build_context(
+                channel_id=task.channel_id,
+                user_map=user_map,
+                tool_schemas=tools,
+                store=msg_store,
+                thread_ts=task.thread_ts,
+                current_user=task.requester_user_id,
+                current_text=task.objective,
+                task=task,
+            )
             if not messages:
-                system, messages = await engine.build_context(
-                    channel_id=task.channel_id,
-                    user_map=user_map,
-                    tool_schemas=tools,
-                    store=msg_store,
-                    thread_ts=task.thread_ts,
-                    current_user=task.requester_user_id,
-                    current_text=task.objective,
-                    task=task,
-                )
-            else:
-                system, _ = await engine.build_context(
-                    channel_id=task.channel_id,
-                    user_map=user_map,
-                    tool_schemas=tools,
-                    store=msg_store,
-                    thread_ts=task.thread_ts,
-                    current_user=task.requester_user_id,
-                    current_text=task.objective,
-                    task=task,
-                )
+                messages = built
 
             ctx = LLMRequestContext(
                 workspace_id=task.workspace_id,

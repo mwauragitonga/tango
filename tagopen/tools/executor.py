@@ -20,6 +20,8 @@ from tagopen.tools.sandbox import run_python_sandboxed
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
 
+    from tagopen.memory.store import MessageStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ class ToolExecutor:
         task_store: SqliteTaskStore,
         task: Task | None = None,
         channel_policy: dict[str, Any] | None = None,
-        message_store: Any | None = None,
+        message_store: MessageStore | None = None,
     ) -> None:
         self.app = app
         self.workspace_id = workspace_id

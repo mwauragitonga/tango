@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from tagopen.agent.meta_commands import (
     format_skills_reply,
@@ -182,9 +183,9 @@ async def run_inline_turn(
         thread_ts=thread_ts,
     )
 
-    # Async memory curation — non-blocking for the Slack turn
-    asyncio_create = __import__("asyncio").create_task
-    asyncio_create(run_memory_curation(channel_id, system_prompt, messages, final_text, thread_ts=thread_ts))
+    asyncio.create_task(
+        run_memory_curation(channel_id, system_prompt, messages, final_text, thread_ts=thread_ts)
+    )
 
     if tool_call_count >= 5:
         await maybe_create_skill(channel_id, messages, final_text, tool_call_count)
@@ -221,8 +222,6 @@ async def _handle_model_command(cmd, channel_id: str, thread_ts: str, store: Mes
 
 
 async def _post_reply(app: "AsyncApp", channel_id: str, thread_ts: str, text: str) -> None:
-    import asyncio
-
     await asyncio.wait_for(
         app.client.chat_postMessage(
             channel=channel_id,

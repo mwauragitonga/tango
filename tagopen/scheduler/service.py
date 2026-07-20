@@ -53,8 +53,6 @@ async def _tick() -> None:
     app = _app
     if app is None:
         return
-    from pathlib import Path
-
     from tagopen.ambient.heartbeat import run_heartbeat_enqueue
 
     root = settings.data_dir / "workspaces"

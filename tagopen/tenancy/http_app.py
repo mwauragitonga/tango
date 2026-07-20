@@ -84,10 +84,9 @@ async def start_http(bolt_app: "AsyncApp") -> None:
 
     runner = web.AppRunner(aio)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(getattr(settings, "http_port", 3000) or 3000))
+    site = web.TCPSite(runner, "0.0.0.0", settings.http_port)
     await site.start()
-    logger.info("Tango HTTP Events + OAuth listening")
-    # Block forever
+    logger.info("Tango HTTP Events + OAuth listening on %s", settings.http_port)
     import asyncio
 
     await asyncio.Event().wait()
