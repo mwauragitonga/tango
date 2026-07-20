@@ -19,7 +19,7 @@ COWORKER_PACK=(
   software-development-toolkit
   research-toolkit
   diagramming
-  ideation
+  creative-ideation
   github
   cron-debug-path-issues
   migration-completion-checklist
