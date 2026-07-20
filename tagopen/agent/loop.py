@@ -8,6 +8,12 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from tagopen.agent.context import build_messages, build_system_prompt
+from tagopen.agent.meta_commands import (
+    format_skills_reply,
+    format_tools_reply,
+    is_skills_question,
+    is_tools_question,
+)
 from tagopen.agent.model_commands import parse_model_command
 from tagopen.agent.skills import maybe_create_skill
 from tagopen.config import settings
@@ -61,6 +67,34 @@ async def run_agent_loop(
     cmd = parse_model_command(text)
     if cmd is not None:
         reply = await _handle_model_command(cmd, channel_id, thread_ts, store)
+        await _post_reply(app, channel_id, thread_ts, reply)
+        await store.add_message(
+            ts=str(time.time()),
+            role="assistant",
+            user_id="agent",
+            display_name="agent",
+            content=reply,
+            thread_ts=thread_ts,
+        )
+        return
+
+    # Deterministic tools/skills inventory — LLM often omit MCP from free-form answers
+    if is_tools_question(text):
+        tools = await get_channel_tools(channel_id)
+        reply = format_tools_reply(tools)
+        await _post_reply(app, channel_id, thread_ts, reply)
+        await store.add_message(
+            ts=str(time.time()),
+            role="assistant",
+            user_id="agent",
+            display_name="agent",
+            content=reply,
+            thread_ts=thread_ts,
+        )
+        return
+
+    if is_skills_question(text):
+        reply = format_skills_reply(channel_id)
         await _post_reply(app, channel_id, thread_ts, reply)
         await store.add_message(
             ts=str(time.time()),
