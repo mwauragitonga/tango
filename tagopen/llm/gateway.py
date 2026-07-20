@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     from tagopen.tasks.store import SqliteTaskStore
 
 logger = logging.getLogger(__name__)
+
+OnFirstToken = Callable[[], Awaitable[None]]
 
 
 @dataclass
@@ -72,6 +75,60 @@ def build_metadata(ctx: LLMRequestContext) -> dict[str, Any]:
     }
 
 
+def _chunk_has_output(chunk: Any) -> bool:
+    """True when a stream chunk carries assistant text or tool-call deltas."""
+    choices = getattr(chunk, "choices", None) or []
+    if not choices:
+        return False
+    delta = getattr(choices[0], "delta", None)
+    if delta is None:
+        return False
+    if getattr(delta, "content", None):
+        return True
+    tool_calls = getattr(delta, "tool_calls", None)
+    return bool(tool_calls)
+
+
+async def _fire_first_token(on_first_token: OnFirstToken | None, fired: list[bool]) -> None:
+    if fired[0] or on_first_token is None:
+        return
+    fired[0] = True
+    try:
+        await on_first_token()
+    except Exception:
+        logger.debug("on_first_token callback failed", exc_info=True)
+
+
+async def _stream_completion(
+    *,
+    messages: list[dict],
+    tools: list[dict] | None,
+    tool_choice: str | None,
+    on_first_token: OnFirstToken | None,
+    **kwargs: Any,
+) -> Any:
+    """Stream via LiteLLM, fire first-token hook, rebuild a full ModelResponse."""
+    kwargs = dict(kwargs)
+    kwargs.pop("stream", None)
+    stream = await litellm.acompletion(
+        messages=messages,
+        tools=tools or None,
+        tool_choice=tool_choice if tools else None,
+        stream=True,
+        stream_options={"include_usage": True},
+        **kwargs,
+    )
+    chunks: list[Any] = []
+    fired = [False]
+    async for chunk in stream:
+        chunks.append(chunk)
+        if _chunk_has_output(chunk):
+            await _fire_first_token(on_first_token, fired)
+    if not chunks:
+        raise RuntimeError("LiteLLM stream returned no chunks")
+    return litellm.stream_chunk_builder(chunks, messages=messages)
+
+
 async def complete(
     ctx: LLMRequestContext,
     *,
@@ -80,13 +137,21 @@ async def complete(
     tool_choice: str | None = None,
     task_store: SqliteTaskStore | None = None,
     use_proxy_fallbacks: bool | None = None,
+    on_first_token: OnFirstToken | None = None,
+    stream: bool | None = None,
     **kwargs: Any,
 ) -> tuple[Any, str | None]:
-    """Complete with attribution. Returns (response, failover_notice)."""
+    """Complete with attribution. Returns (response, failover_notice).
+
+    When ``settings.llm_stream`` is True (default), uses LiteLLM streaming so
+    ``on_first_token`` can update Slack reactions as soon as output starts.
+    Callers still receive a fully aggregated response (same shape as non-stream).
+    """
     model = kwargs.pop("model", None) or resolve_model(ctx.channel_id, ctx.thread_ts)
     meta = build_metadata(ctx)
     kwargs["metadata"] = {**(kwargs.get("metadata") or {}), **meta}
     kwargs.setdefault("timeout", settings.llm_timeout_seconds)
+    use_stream = settings.llm_stream if stream is None else stream
 
     use_app_fallbacks = (
         settings.llm_use_app_fallbacks
@@ -104,12 +169,24 @@ async def complete(
     for i, m in enumerate(chain):
         try:
             kwargs["model"] = m
-            resp = await litellm.acompletion(
-                messages=messages,
-                tools=tools or None,
-                tool_choice=tool_choice if tools else None,
-                **kwargs,
-            )
+            if use_stream:
+                resp = await _stream_completion(
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    on_first_token=on_first_token,
+                    **kwargs,
+                )
+            else:
+                resp = await litellm.acompletion(
+                    messages=messages,
+                    tools=tools or None,
+                    tool_choice=tool_choice if tools else None,
+                    **kwargs,
+                )
+                # Non-stream: treat full response as "first token" for UX parity.
+                await _fire_first_token(on_first_token, [False])
+
             if i > 0:
                 notice = f"↪️ switched to `{m}` (primary `{model}` failed)"
                 logger.warning("LLM failover: %s → %s", model, m)

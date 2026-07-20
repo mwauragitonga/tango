@@ -169,6 +169,7 @@ class TaskWorker:
                         tools=tools,
                         tool_choice="auto",
                         task_store=store,
+                        on_first_token=status.llm_first_token,
                     )
                 except Exception as e:
                     # transient → leave resume_pending for retry

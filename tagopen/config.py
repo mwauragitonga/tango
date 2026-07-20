@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # When Proxy owns routing, set False to avoid duplicate fallback loops
     llm_use_app_fallbacks: bool = True
     llm_timeout_seconds: float = 120.0
+    # Stream agent completions so Slack can react on first token (set False to disable).
+    llm_stream: bool = True
     model_context_window: int = 128_000
     anthropic_api_key: str = ""
     openai_api_key: str = ""

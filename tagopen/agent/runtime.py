@@ -157,6 +157,7 @@ async def run_inline_turn(
                 tools=tools or None,
                 tool_choice="auto" if tools else None,
                 task_store=task_store,
+                on_first_token=status.llm_first_token,
             )
             if notice and not failover_notice:
                 failover_notice = notice

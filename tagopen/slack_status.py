@@ -8,6 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 THINKING_EMOJI = "thinking_face"
+FIRST_TOKEN_EMOJI = "speech_balloon"
 
 
 def emoji_for_tool(tool_name: str) -> str:
@@ -37,6 +38,7 @@ class SlackStatus:
         self.thread_ts = thread_ts
         self.event_ts = event_ts
         self._active_tool_emoji: str | None = None
+        self._first_token_active = False
         self._status_msg_ts: str | None = None
 
     async def llm_start(self) -> None:
@@ -45,9 +47,36 @@ class SlackStatus:
             return
         await self._reactions_add(THINKING_EMOJI)
 
+    async def llm_first_token(self) -> None:
+        """Mark that the model started producing output (first stream delta)."""
+        if self.event_ts:
+            await self._reactions_add(FIRST_TOKEN_EMOJI)
+            self._first_token_active = True
+            return
+        # No event_ts: brief status post (replaced by tool status if tools run).
+        if self._status_msg_ts:
+            return
+        try:
+            resp = await self.client.chat_postMessage(
+                channel=self.channel_id,
+                thread_ts=self.thread_ts,
+                text="Generating…",
+            )
+            if isinstance(resp, dict):
+                self._status_msg_ts = resp.get("ts")
+            else:
+                data = getattr(resp, "data", None) or {}
+                self._status_msg_ts = data.get("ts") if isinstance(data, dict) else None
+            self._first_token_active = True
+        except Exception:
+            logger.debug("Failed to post first-token status", exc_info=True)
+
     async def tool_start(self, tool_name: str) -> None:
         emoji = emoji_for_tool(tool_name)
         if self.event_ts:
+            if self._first_token_active:
+                await self._reactions_remove(FIRST_TOKEN_EMOJI)
+                self._first_token_active = False
             if self._active_tool_emoji and self._active_tool_emoji != emoji:
                 await self._reactions_remove(self._active_tool_emoji)
                 self._active_tool_emoji = None
@@ -57,6 +86,7 @@ class SlackStatus:
 
         # No event_ts: at most one live status post (delete + repost on new tool).
         await self._clear_status_post()
+        self._first_token_active = False
         try:
             resp = await self.client.chat_postMessage(
                 channel=self.channel_id,
@@ -87,6 +117,9 @@ class SlackStatus:
         if self._active_tool_emoji and self.event_ts:
             await self._reactions_remove(self._active_tool_emoji)
             self._active_tool_emoji = None
+        if self._first_token_active and self.event_ts:
+            await self._reactions_remove(FIRST_TOKEN_EMOJI)
+            self._first_token_active = False
         await self._clear_status_post()
         if self.event_ts:
             await self._reactions_remove(THINKING_EMOJI)
