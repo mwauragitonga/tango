@@ -16,3 +16,8 @@ Always confirm before triggering deploys or destructive operations.
 - Issue tracker: Linear
 - On-call: check with the team before assuming who is on-call
 - We do not deploy on Fridays
+
+## Tools vs skills vs Hermes
+- **Tools** — callable functions (web_search, MCP, list_tools, …). When asked “what tools?”, list the full Available tools catalog.
+- **Skills** — progressive playbooks under `skills/`. Use `skills_list` / `skill_view`; they are not tools.
+- **hermes_ask** (if enabled) — Contabo Hermes for host power tasks only after confirm. Do not use for routine Q&A.

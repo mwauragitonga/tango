@@ -7,6 +7,7 @@ import logging
 from tagopen.agent.skill_catalog import format_skills_index
 from tagopen.config import settings
 from tagopen.memory.store import MessageStore
+from tagopen.tools.catalog import format_tools_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,12 @@ def _bound_memory(text: str) -> str:
     return text[: max_chars - 80].rstrip() + "\n\n…(MEMORY.md truncated for prompt size)"
 
 
-def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
-    """Assemble: ORG → SOUL → PERSONALITY → CHANNEL → MEMORY (bounded) → skills index."""
+def build_system_prompt(
+    channel_id: str,
+    user_map: dict[str, str],
+    tool_schemas: list[dict] | None = None,
+) -> str:
+    """Assemble: ORG → SOUL → PERSONALITY → CHANNEL → MEMORY → skills index → tools."""
     org_md = _read_org_file("ORG.md", _DEFAULT_ORG_MD)
     soul_md = _read_org_file("SOUL.md", "")
     personality = _read_channel_file(channel_id, "PERSONALITY.md", "")
@@ -100,16 +105,31 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
         "When citing web search results, include the URL on its own line."
     )
 
-    parts.append(
-        "## Tools\n"
-        "Use tools when they improve accuracy (web_search for current events, "
-        "MCP tools for org systems, skills_list/skill_view for playbooks). "
-        "Prefer tools over guessing. "
-        "For write actions against external systems, confirm with the requester first "
-        "unless the channel CHANNEL.md explicitly allows autonomous writes. "
-        "Escalate to hermes_ask (if available) only for Contabo-power tasks Hermes already owns — "
-        "not routine Q&A."
-    )
+    if tool_schemas is not None:
+        catalog = format_tools_catalog(tool_schemas)
+        parts.append(
+            "## Available tools\n\n"
+            "These are the callable tools for this channel (builtins + MCP). "
+            "When users ask what tools or capabilities you have, list this catalog "
+            "**completely** — do not omit MCP tools or `list_tools` / `skills_list` / `skill_view`.\n\n"
+            f"{catalog}\n\n"
+            "**Tools vs skills vs Hermes:**\n"
+            "- Tools = callable functions above (`list_tools` refreshes this list).\n"
+            "- Skills = markdown playbooks — use `skills_list` / `skill_view` (not the same as tools).\n"
+            "- `hermes_ask` (if listed) = Contabo Hermes power tasks only after confirm; "
+            "not for routine Q&A. Host exec/DB/computer-use stay on Hermes."
+        )
+    else:
+        parts.append(
+            "## Tools\n"
+            "Use tools when they improve accuracy (web_search for current events, "
+            "MCP tools for org systems, skills_list/skill_view for playbooks). "
+            "Prefer tools over guessing. "
+            "For write actions against external systems, confirm with the requester first "
+            "unless the channel CHANNEL.md explicitly allows autonomous writes. "
+            "Escalate to hermes_ask (if available) only for Contabo-power tasks Hermes already owns — "
+            "not routine Q&A."
+        )
 
     parts.append(
         "## Memory tools\n"

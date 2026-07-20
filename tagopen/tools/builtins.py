@@ -91,6 +91,17 @@ BUILTIN_TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "list_tools",
+            "description": "List every callable tool registered for this channel (builtins + MCP). Use when the user asks what tools you have.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "skills_list",
             "description": "List channel skills (name + description). Use skill_view to load a full playbook.",
             "parameters": {

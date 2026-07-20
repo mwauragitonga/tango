@@ -13,6 +13,7 @@ import toml
 
 from tagopen.config import settings
 from tagopen.tools.builtins import BUILTIN_TOOLS, dispatch_builtin
+from tagopen.tools.catalog import format_tools_catalog
 from tagopen.tools.mcp_client import call_mcp_tool, list_mcp_tools
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,15 @@ def invalidate_channel_tools(channel_id: str) -> None:
 
 async def dispatch_tool(fn_name: str, args: dict[str, Any], channel_id: str) -> Any:
     """Dispatch a tool call to built-ins or MCP servers."""
+    if fn_name == "list_tools":
+        tools = await get_channel_tools(channel_id)
+        catalog = format_tools_catalog(tools)
+        return (
+            "Callable tools for this channel:\n"
+            f"{catalog}\n\n"
+            "Skills (playbooks) are separate — call skills_list / skill_view."
+        )
+
     builtin_names = {t["function"]["name"] for t in BUILTIN_TOOLS}
     if fn_name in builtin_names:
         return await dispatch_builtin(fn_name, args, channel_id=channel_id)

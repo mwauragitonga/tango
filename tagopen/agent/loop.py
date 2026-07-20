@@ -83,9 +83,9 @@ async def run_agent_loop(
     except Exception:
         user_map = {user_id: display_name}
 
-    system_prompt = build_system_prompt(channel_id, user_map)
-    messages = await build_messages(channel_id, user_id, display_name, text, thread_ts, store)
     tools = await get_channel_tools(channel_id)
+    system_prompt = build_system_prompt(channel_id, user_map, tool_schemas=tools)
+    messages = await build_messages(channel_id, user_id, display_name, text, thread_ts, store)
 
     tool_call_count = 0
     final_text = ""
