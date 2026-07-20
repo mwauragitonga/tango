@@ -364,19 +364,19 @@ When someone asks to deploy a service to staging.
 
 ## Phase Build Plan
 
-### Phase 1 — Reactive channel teammate (target: 2–3 weeks)
-- [ ] Project scaffold: Python, Bolt async, pyproject.toml
-- [ ] Socket Mode Slack connection
-- [ ] Channel router: `(workspace_id, channel_id)` → `AgentSession`
-- [ ] Context assembler: CHANNEL.md + MEMORY.md + recent messages with attribution
-- [ ] Agent loop: ReAct + tool-use via LiteLLM
-- [ ] 3 built-in MCP tools: web search, Python code runner, file reader
-- [ ] SQLite + FTS5 session store per channel
-- [ ] Multi-user attribution in context window
-- [ ] File-based channel config (CHANNEL.md, TOOLS.md, BUDGET.md)
-- [ ] Basic token budget enforcement
+### Phase 1 — Reactive channel teammate (historical — shipped on Contabo)
+- [x] Project scaffold: Python, Bolt async, pyproject.toml
+- [x] Socket Mode Slack connection
+- [x] Channel router: `(workspace_id, channel_id)` → `AgentSession`
+- [x] Context assembler: CHANNEL.md + MEMORY.md + recent messages with attribution
+- [x] Agent loop: ReAct + tool-use via LiteLLM (now also durable worker path)
+- [x] Built-in tools: web search, Python sandbox, channel FTS (MCP via tools.toml)
+- [x] SQLite + FTS5 session store per workspace DB
+- [x] Multi-user attribution in context window
+- [ ] File-based `BUDGET.md` hard enforcement — **not implemented** (settings token fields exist; no BUDGET.md loader)
+- [ ] Basic per-channel token budget rejection — **not implemented**
 
-**Milestone:** `@agent explain the last PR that was deployed` works in a Slack channel, with shared context across all users.
+**Milestone:** Channel `@Tango` Q&A with shared context works on Contabo. Live status: [docs/COWORKER-RUNTIME-STATUS.md](docs/COWORKER-RUNTIME-STATUS.md).
 
 ### Phase 2 — Memory + Skills
 - [x] Letta inner loop: memory curation turn after each response (`memory/writer.py`, async from runtime)

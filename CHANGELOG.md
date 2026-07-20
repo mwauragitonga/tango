@@ -1,3 +1,10 @@
+## [Unreleased] — Docs honesty pass
+
+- Rewrite `docs/COWORKER-RUNTIME-STATUS.md` (code / wired / Contabo-verified / SaaS-ready)
+- Sync PLAN Phase 1 + README roadmap; fix BUDGET.md marketing claim
+- Refresh `docs/ARCHITECTURE.md` for durable path; add ADR-0001, API-CONTRACTS, THREAT-MODEL
+- Mem0 namespace + Temporal unwired wording fixes
+
 ## [Unreleased] — Coworker runtime (100X)
 
 ### Added

@@ -86,7 +86,7 @@ Open Claude Tag is the open-source alternative. Same channel-native mental model
 | MCP-native tools | ✅ | Partial | **✅** |
 | Per-channel model override | ❌ | ❌ | **✅** |
 | Per-channel tool scoping | ✅ | ❌ | **✅ tools.toml** |
-| Token budget controls | ✅ | ❌ | **✅ BUDGET.md** |
+| Token budget controls | ✅ | ❌ | Settings fields only — **no BUDGET.md loader yet** |
 | Discord / Teams support | ❌ (Slack only) | ✅ | Roadmap |
 | Pricing | Enterprise + Team plan | Free | **Free** |
 
@@ -433,37 +433,15 @@ PLAN.md          ← full architecture and design decisions
 
 ## Roadmap
 
-- [x] **Phase 1** — Channel-native reactive teammate
-  - [x] Slack Bolt async app, Socket Mode
-  - [x] Channel router: `(workspace_id, channel_id)` → shared `AgentSession`
-  - [x] Multi-user attribution in context window
-  - [x] ReAct agent loop via LiteLLM
-  - [x] SQLite + FTS5 per-channel message store
-  - [x] File-based channel config (CHANNEL.md, MEMORY.md, tools.toml)
-  - [x] Built-in tools: web search, Python runner, channel history search
-  - [x] Per-channel model override
-  - [x] Multi-provider: Anthropic, OpenAI, Gemini, Groq, Ollama
-- [ ] **Phase 2** — Memory + Skills
-  - [ ] Letta inner-loop memory curation (agent writes MEMORY.md)
-  - [ ] Skill auto-creation (≥5 tool calls → SKILL.md)
-  - [ ] Skill loader: semantic match to incoming task
-  - [ ] Skill curator: weekly prune, stale/archived lifecycle
-  - [ ] Mem0 semantic recall layer
-- [ ] **Phase 3** — Ambient mode
-  - [ ] Per-channel APScheduler heartbeat crons
-  - [ ] LLM heartbeat evaluator (SILENT or post)
-  - [ ] Stale thread detection
-  - [ ] `schedule_task` tool: agent creates its own monitoring crons
-  - [ ] Temporal for durable task orchestration
-- [ ] **Phase 4** — Governance + Admin UI
-  - [ ] Per-channel audit log (tokens spent, tools invoked)
-  - [ ] Hard token budget enforcement via BUDGET.md
-  - [ ] Next.js admin UI: channel config, tool access, budget view
-- [ ] **Phase 5** — Multi-platform
-  - [ ] Discord adapter
-  - [ ] Microsoft Teams adapter
+**Live status (code / wired / Contabo-verified / SaaS-ready):** [docs/COWORKER-RUNTIME-STATUS.md](docs/COWORKER-RUNTIME-STATUS.md)
 
-See [PLAN.md](PLAN.md) for full architecture decisions and research notes.
+Summary (Tango fork):
+
+- **Phase 1** — Channel-native reactive teammate: **done** on Contabo (Socket Mode, shared channel session, LiteLLM SDK).
+- **Phase 2–3** — Memory, skills, ambient enqueue, durable tasks: **mostly wired**; Mem0 off by default; weekly skill curator unscheduled; Temporal **unwired stub**.
+- **Phase 4+** — Admin UI, hard `BUDGET.md` enforcement, Discord/Teams: **not started**.
+
+Historical design notes: [PLAN.md](PLAN.md). SaaS Slack manifests: [docs/SLACK-SAAS-MANIFEST.md](docs/SLACK-SAAS-MANIFEST.md).
 
 ---
 

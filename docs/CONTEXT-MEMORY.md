@@ -17,6 +17,6 @@ Context is **thread/task scoped** via `MessageStore.get_recent_messages(..., thr
 | Working | `tasks` + checkpoint JSON | plan, blockers, next action |
 | Channel | `MEMORY.md` (projection) + `memories` table | provenance required for authoritative facts |
 | Episodic | `memories` kind=episodic | completed task lessons |
-| Semantic | optional Mem0 (`MEM0_ENABLED`, `MEM0_DSN`) | namespace `org/workspace/channel`; never Hermes `USER.md` |
+| Semantic | optional Mem0 (`MEM0_ENABLED`, `MEM0_DSN`) | namespace `{workspace_id}/{channel_id}` (see `memory/layers.py`); never Hermes `USER.md` |
 
 Curation runs asynchronously after replies (`memory/writer.py`) using atomic locked writes (`memory/files.py`).

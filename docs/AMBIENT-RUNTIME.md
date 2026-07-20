@@ -14,4 +14,4 @@ Tools: `schedule_task`, `list_schedules`, `pause_schedule`, `resume_schedule`, `
 
 ## Temporal
 
-When `TEMPORAL_ENABLED=true`, `scheduler/temporal_adapter.py` wraps the same task worker as activities. Domain state remains in SQLite/Postgres task store.
+`scheduler/temporal_adapter.py` is an **unwired stub**. Setting `TEMPORAL_ENABLED=true` alone does nothing — `start_temporal_worker()` is not called from `gateway/app.py`. Contabo runs without Temporal (SQLite leases + APScheduler enqueue). See [ADR-0001-sqlite-vs-temporal.md](./ADR-0001-sqlite-vs-temporal.md).
