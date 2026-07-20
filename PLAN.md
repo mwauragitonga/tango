@@ -378,25 +378,25 @@ When someone asks to deploy a service to staging.
 
 **Milestone:** `@agent explain the last PR that was deployed` works in a Slack channel, with shared context across all users.
 
-### Phase 2 — Memory + Skills (target: +2 weeks)
-- [ ] Letta inner loop: memory curation turn after each response
-- [ ] `memory_append` and `memory_replace` agent tools
-- [ ] Hermes-style skill auto-creation (≥5 tool calls → write SKILL.md)
-- [ ] Skill loader: semantic match skill to incoming task
-- [ ] Skill curator (weekly background job)
-- [ ] Mem0 integration for semantic recall layer
+### Phase 2 — Memory + Skills
+- [x] Letta inner loop: memory curation turn after each response (`memory/writer.py`, async from runtime)
+- [x] `memory_append` and `memory_replace` agent tools (atomic locked writes)
+- [x] Hermes-style skill auto-creation (≥5 tool calls → SKILL.md, validated)
+- [x] Skill loader: semantic match to incoming task (token-overlap + `skill_view` gate; not yet LiteLLM embeddings/pgvector)
+- [x] Skill curator (stale 30d / archive 90d) — **code exists**; weekly cron not yet auto-scheduled on Contabo
+- [x] Mem0 semantic recall — **optional hook** (`MEM0_ENABLED` + DSN); off by default on Contabo
 
-**Milestone:** Agent remembers team conventions across sessions without being told twice. Skill library grows automatically.
+**Milestone (partial):** Channel MEMORY.md + skill library work in production; Mem0/embeddings and auto weekly curator still open.
 
-### Phase 3 — Ambient mode (target: +2 weeks)
-- [ ] Heartbeat evaluator (APScheduler, per channel)
-- [ ] Stale thread detection
-- [ ] `schedule_task` tool (agent creates its own crons)
-- [ ] Observation dump builder
-- [ ] SILENT / post decision logic
-- [ ] Temporal integration for durable task orchestration (optional at this stage)
+### Phase 3 — Ambient mode
+- [x] Heartbeat evaluator (APScheduler enqueue-only tick; memory job store — no AsyncApp pickle)
+- [x] Stale thread detection (waiting_approval / waiting_external age hints)
+- [x] `schedule_task` / list / pause / resume / delete tools → durable task enqueue
+- [x] Observation dump builder
+- [x] SILENT / post decision logic (dedupe + quiet hours)
+- [x] Temporal adapter stub (`TEMPORAL_ENABLED=false` by default) — not multi-replica production yet
 
-**Milestone:** Agent proactively surfaces a forgotten thread or approaching deadline without being tagged.
+**Milestone (partial):** Schedules + heartbeat enqueue ship; Temporal multi-worker and richer ambient UX still maturing.
 
 ### Phase 4 — Governance + Admin UI (target: +2 weeks)
 - [ ] Per-channel audit log (who asked what, which tools ran, tokens spent)
