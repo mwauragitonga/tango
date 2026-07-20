@@ -1,12 +1,19 @@
 # Changelog (Tango fork)
 
-## Unreleased / 2026-07-20
+## 2026-07-20
 
-Fork of [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) as **Tango** (`toshiusklay/tango`).
+Fork lineage: [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) → maintained at [mwauragitonga/tango](https://github.com/mwauragitonga/tango).
 
 ### Fixes
 
-- **Crash:** import `asyncio` in `tagopen/gateway/router.py` (was `NameError` when creating session locks).
-- **Slack mrkdwn:** convert CommonMark `**bold**` / headings / links / `~~strike~~` before `chat_postMessage` (`tagopen/slack_format.py`, used from `agent/loop.py`).
-- **Reply hygiene:** strip echoed `[timestamp @agent]` / `[@name]` prefixes; do not prefix assistant history as `@agent` in `context.py` (that taught the model to leak prefixes into Slack).
-- **sqlite3.Row:** use Row indexing (not `.get`) when attributing user history.
+- **Crash:** import `asyncio` in `tagopen/gateway/router.py`.
+- **Slack mrkdwn:** `tagopen/slack_format.py` + convert in `agent/loop.py`; strip `[ts @agent]` prefixes.
+- **Web search:** replace DuckDuckGo Instant Answer with multi-provider search (`ddgs` default; optional Tavily/Brave/Serper/Firecrawl).
+
+### Features
+
+- **MCP client:** stdio MCP servers from channel `tools.toml` (list + call).
+- **Org KB example:** `examples/mcp/org_kb_server.py` + `data/org/ORG.md`.
+- **ORG.md / PERSONALITY.md** in system prompt.
+- **Contabo-only Hermes bridge:** `examples/mcp/hermes_bridge_server.py` + [docs/HERMES-MCP.md](docs/HERMES-MCP.md).
+- **SaaS roadmap:** [docs/SAAS-ROADMAP.md](docs/SAAS-ROADMAP.md).

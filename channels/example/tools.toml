@@ -1,21 +1,19 @@
-# Channel tool + LLM configuration
-# Built-in tools (web_search, run_python, search_channel_history) are always available.
+# Per-channel tools. Built-ins (web_search, run_python, …) are always on.
+# MCP servers use stdio: command + args (see examples/mcp/).
 
-# Per-channel LLM override — leave commented to use the global LLM_MODEL
+# Optional per-channel model override:
 # [llm]
-# model = "gpt-4o"                          # use OpenAI for this channel
-# model = "claude-sonnet-4-6"               # use Anthropic
-# model = "gemini/gemini-2.0-flash"         # use Gemini
-# model = "groq/llama-3.3-70b-versatile"   # use Groq
+# model = "openai/kimi-k2.7-code"
 
-# Example: GitHub MCP server
-# [[mcp_server]]
-# name = "github"
-# url = "mcp://localhost:3001"
-# allowed_tools = ["list_prs", "get_file", "create_comment"]
+[[mcp_server]]
+name = "org_kb"
+command = "/opt/apps/open-claude-tag/.venv/bin/python"
+args = ["/opt/apps/open-claude-tag/examples/mcp/org_kb_server.py"]
+allowed_tools = ["org_lookup", "list_org_docs"]
 
-# Example: Linear MCP server
+# Contabo-only Hermes bridge (NOT for SaaS tenants):
 # [[mcp_server]]
-# name = "linear"
-# url = "mcp://localhost:3002"
-# allowed_tools = ["list_issues", "create_issue", "update_status"]
+# name = "hermes"
+# command = "/opt/apps/open-claude-tag/.venv/bin/python"
+# args = ["/opt/apps/open-claude-tag/examples/mcp/hermes_bridge_server.py"]
+# allowed_tools = ["hermes_ask"]

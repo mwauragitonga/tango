@@ -21,7 +21,7 @@
 
 ---
 
-> **Tango fork** — maintained at [toshiusklay/tango](https://github.com/toshiusklay/tango).  
+> **Tango fork** — maintained at [mwauragitonga/tango](https://github.com/mwauragitonga/tango).  
 > Slack bot display name: **Tango**. Ops runbook (credentials, Contabo systemd): keep in your devops monorepo `apps/open-claude-tag/`.  
 > **Architecture:** standalone Slack Bolt + LiteLLM + SQLite — **not** OpenClaw or Hermes under the hood. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CHANGELOG.md](CHANGELOG.md).  
 > Upstream lineage: [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) (MIT).

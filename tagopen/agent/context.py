@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from tagopen.config import settings
 from tagopen.memory.store import MessageStore
@@ -17,6 +16,8 @@ You are a helpful AI teammate in this Slack channel.
 Be concise, direct, and technical. Ask clarifying questions before taking big actions.
 """
 
+_DEFAULT_ORG_MD = ""
+
 
 def _read_channel_file(channel_id: str, filename: str, default: str = "") -> str:
     path = settings.channels_dir / channel_id / filename
@@ -25,13 +26,31 @@ def _read_channel_file(channel_id: str, filename: str, default: str = "") -> str
     return default
 
 
+def _read_org_file(filename: str, default: str = "") -> str:
+    path = settings.org_dir / filename
+    if path.exists():
+        return path.read_text()
+    return default
+
+
 def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
-    """Assemble the system prompt from CHANNEL.md + MEMORY.md + active skills."""
+    """Assemble system prompt: ORG.md + CHANNEL.md + MEMORY.md + skills + guardrails."""
+    org_md = _read_org_file("ORG.md", _DEFAULT_ORG_MD)
+    # Optional channel-local personality override (SOUL-like, channel-scoped)
+    personality = _read_channel_file(channel_id, "PERSONALITY.md", "")
     channel_md = _read_channel_file(channel_id, "CHANNEL.md", _DEFAULT_CHANNEL_MD)
     memory_md = _read_channel_file(channel_id, "MEMORY.md", "")
     skills = _load_skills(channel_id)
 
-    parts = [channel_md.strip()]
+    parts: list[str] = []
+
+    if org_md.strip():
+        parts.append(f"## Organization context\n\n{org_md.strip()}")
+
+    if personality.strip():
+        parts.append(f"## Personality\n\n{personality.strip()}")
+
+    parts.append(channel_md.strip())
 
     if memory_md.strip():
         parts.append(f"## What I know about this channel\n\n{memory_md.strip()}")
@@ -39,6 +58,10 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
     if skills:
         skill_block = "\n\n".join(f"### Skill: {name}\n{content}" for name, content in skills)
         parts.append(f"## Available skills\n\n{skill_block}")
+
+    if user_map:
+        roster = ", ".join(f"@{name}" for name in sorted(set(user_map.values()))[:40])
+        parts.append(f"## Channel roster\n{roster}")
 
     parts.append(
         "## Multi-user context\n"
@@ -53,7 +76,16 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
         "## Slack formatting\n"
         "Replies are posted as Slack mrkdwn. Prefer *bold* (single asterisks), "
         "_italic_, `code`, and bullet lists with - or •. "
-        "Do not use Markdown **double asterisks** or # headings."
+        "Do not use Markdown **double asterisks** or # headings. "
+        "When citing web search results, include the URL on its own line."
+    )
+
+    parts.append(
+        "## Tools\n"
+        "Use tools when they improve accuracy (web_search for current events, "
+        "MCP tools for org systems). Prefer tools over guessing. "
+        "For write actions against external systems, confirm with the requester first "
+        "unless the channel CHANNEL.md explicitly allows autonomous writes."
     )
 
     parts.append(
@@ -73,7 +105,6 @@ def _load_skills(channel_id: str) -> list[tuple[str, str]]:
     results = []
     for path in sorted(skills_dir.glob("*.md")):
         content = path.read_text()
-        # Skip archived skills
         if "status: archived" in content:
             continue
         results.append((path.stem, content))
@@ -103,6 +134,5 @@ async def build_messages(
             content = f"[{ts_str} @{name}] {content}"
         messages.append({"role": role, "content": content})
 
-    # Append current user message
     messages.append({"role": "user", "content": f"[@{display_name}] {text}"})
     return messages

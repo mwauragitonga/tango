@@ -19,6 +19,18 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     groq_api_key: str = ""
 
+    # Web search — auto-picks first configured provider; else ddgs (keyless)
+    # Providers: tavily | brave | serper | firecrawl | ddgs
+    web_search_provider: str = ""
+    tavily_api_key: str = ""
+    brave_api_key: str = ""
+    serper_api_key: str = ""
+    firecrawl_api_key: str = ""
+
+    # Optional Contabo Hermes API (for hermes MCP adapter examples only — not SaaS default)
+    hermes_api_url: str = "http://127.0.0.1:8642"
+    hermes_api_key: str = ""
+
     # Storage
     data_dir: Path = Path("./data")
 
@@ -30,6 +42,10 @@ class Settings(BaseSettings):
     @property
     def channels_dir(self) -> Path:
         return self.data_dir / "channels"
+
+    @property
+    def org_dir(self) -> Path:
+        return self.data_dir / "org"
 
     @property
     def db_path(self) -> Path:

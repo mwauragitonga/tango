@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import sys
 from io import StringIO
 from typing import Any
 
-import httpx
+from tagopen.tools.web_search import search_web
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ BUILTIN_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web for up-to-date information",
+            "description": "Search the web for up-to-date information (news, docs, facts). Returns titles, URLs, and snippets.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -64,7 +63,10 @@ BUILTIN_TOOLS: list[dict] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "content": {"type": "string", "description": "The fact to persist (one concise bullet)"},
+                    "content": {
+                        "type": "string",
+                        "description": "The fact to persist (one concise bullet)",
+                    },
                 },
                 "required": ["content"],
             },
@@ -90,49 +92,32 @@ BUILTIN_TOOLS: list[dict] = [
 
 async def dispatch_builtin(fn_name: str, args: dict[str, Any]) -> Any:
     if fn_name == "web_search":
-        return await _web_search(args["query"])
+        return await search_web(args["query"])
     if fn_name == "run_python":
         return _run_python(args["code"])
     if fn_name == "search_channel_history":
         # Actual search happens in dispatch_tool after store lookup; return placeholder
-        return args  # passed through to registry for store-aware dispatch
+        return args
     return f"Unknown built-in: {fn_name}"
-
-
-async def _web_search(query: str) -> str:
-    # Uses DuckDuckGo instant answer API — no key required
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
-            )
-            data = resp.json()
-            abstract = data.get("AbstractText", "")
-            related = [r.get("Text", "") for r in data.get("RelatedTopics", [])[:3] if r.get("Text")]
-            if abstract:
-                return abstract + ("\n\nRelated:\n" + "\n".join(f"- {r}" for r in related) if related else "")
-            if related:
-                return "\n".join(f"- {r}" for r in related)
-            return "No results found."
-    except Exception as e:
-        logger.warning("Web search failed: %s", e)
-        return f"Search failed: {e}"
 
 
 def _run_python(code: str) -> str:
     # Sandboxed Python execution — stdout captured, dangerous builtins removed
     safe_globals: dict[str, Any] = {
         "__builtins__": {
-            k: v for k, v in __builtins__.items()  # type: ignore[union-attr]
+            k: v
+            for k, v in __builtins__.items()  # type: ignore[union-attr]
             if k not in ("open", "exec", "eval", "__import__", "compile")
         }
         if isinstance(__builtins__, dict)
         else {},
         "print": print,
     }
-    # Allow common safe stdlib
-    import math, json, re, datetime
+    import datetime
+    import json
+    import math
+    import re
+
     safe_globals.update({"math": math, "json": json, "re": re, "datetime": datetime})
 
     old_stdout = sys.stdout
