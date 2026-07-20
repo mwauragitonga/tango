@@ -14,10 +14,10 @@
 | Tool policy + HITL | **shipped** | approvals via thread `approve|deny <id>` |
 | MCP pool + HTTP/SSE | **shipped** | `tools/mcp_client.py` |
 | LiteLLM Proxy scaffold | **shipped** | hardened compose + docs; Contabo canary optional |
-| Ambient enqueue scheduler | **shipped** | APScheduler tick + heartbeat |
+| Ambient enqueue scheduler | **shipped** | memory tick + SQLite `schedules` (no AsyncApp pickle) |
 | SaaS OAuth/HTTP | **shipped** | `tenancy/http_app.py` (`SLACK_MODE=http`) |
 | Temporal adapter | **shipped** | optional `TEMPORAL_ENABLED` |
-| Unit tests | **shipped** | `tests/unit/` |
+| Unit/integration tests | **shipped** | `tests/unit/`, `tests/integration/` (22+); Contabo canary active |
 
 ## Rollout
 

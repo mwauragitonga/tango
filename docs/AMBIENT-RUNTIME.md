@@ -2,6 +2,8 @@
 
 APScheduler (`scheduler/service.py`) is **enqueue-only**. It never runs the agent loop directly.
 
+The process tick uses an **in-memory** APScheduler job store (do not pickle `AsyncApp` into SQLAlchemy). Durable per-channel schedules live in Tango’s own SQLite `schedules` table.
+
 ## Schedules
 
 Tools: `schedule_task`, `list_schedules`, `pause_schedule`, `resume_schedule`, `delete_schedule` → `schedules` table → tick enqueues durable tasks.
