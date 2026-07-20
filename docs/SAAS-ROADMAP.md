@@ -21,6 +21,7 @@ Product north star: Claude Tag–shaped multiplayer Slack teammate, **model-agno
 
 - Multi-tenant DB (installations, channel configs, audit)
 - **HTTP Events + OAuth** (Socket Mode is fine for single-tenant Contabo; Marketplace needs HTTP)
+- Slack app manifests (preview vs App Directory): [SLACK-SAAS-MANIFEST.md](./SLACK-SAAS-MANIFEST.md)
 - Per-workspace token store (`team_id` → `xoxb`)
 - Durable jobs; secrets vault; Stripe metering; observability
 - **LiteLLM Proxy** (+ Postgres/Redis) for virtual keys and per-tenant budgets — see [LITELLM-PROXY.md](./LITELLM-PROXY.md)

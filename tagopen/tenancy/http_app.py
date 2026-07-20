@@ -32,7 +32,12 @@ async def start_http(bolt_app: "AsyncApp") -> None:
         params = urlencode(
             {
                 "client_id": settings.slack_client_id,
-                "scope": "app_mentions:read,chat:write,channels:history,groups:history,users:read",
+                # Keep in sync with docs/SLACK-SAAS-MANIFEST.md (preview list;
+                # Directory omits channels:join).
+                "scope": (
+                    "app_mentions:read,chat:write,channels:history,channels:read,"
+                    "channels:join,groups:history,groups:read,reactions:write,users:read"
+                ),
                 "redirect_uri": str(request.url.origin()) + "/slack/oauth/callback",
             }
         )
