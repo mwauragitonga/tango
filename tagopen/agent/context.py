@@ -42,9 +42,18 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
 
     parts.append(
         "## Multi-user context\n"
-        "Messages are prefixed with [timestamp @username]. "
+        "Incoming user messages may be prefixed with [timestamp @username] for attribution. "
         "You are a shared teammate — anyone in the channel can see this conversation. "
-        "When following up, address the relevant person by @username."
+        "When following up, address the relevant person by @username. "
+        "Never include [timestamp @name] or [@name] prefixes in your own replies — "
+        "reply with clean Slack message text only."
+    )
+
+    parts.append(
+        "## Slack formatting\n"
+        "Replies are posted as Slack mrkdwn. Prefer *bold* (single asterisks), "
+        "_italic_, `code`, and bullet lists with - or •. "
+        "Do not use Markdown **double asterisks** or # headings."
     )
 
     parts.append(
@@ -84,10 +93,15 @@ async def build_messages(
 
     messages: list[dict] = []
     for row in recent:
-        ts_str = row["ts"][:16].replace("T", " ")  # trim to minute
-        prefix = f"[{ts_str} @{row['display_name']}]"
         role = "assistant" if row["role"] == "assistant" else "user"
-        messages.append({"role": role, "content": f"{prefix} {row['content']}"})
+        content = row["content"] or ""
+        # Only attribute user turns. Prefixing assistant history as [@agent]
+        # teaches the model to echo that junk into Slack replies.
+        if role == "user":
+            ts_str = str(row["ts"])[:16].replace("T", " ")
+            name = row["display_name"] or row["user_id"] or "user"
+            content = f"[{ts_str} @{name}] {content}"
+        messages.append({"role": role, "content": content})
 
     # Append current user message
     messages.append({"role": "user", "content": f"[@{display_name}] {text}"})

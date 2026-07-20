@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from tagopen.agent.context import build_messages, build_system_prompt
 from tagopen.agent.skills import maybe_create_skill
 from tagopen.config import settings
+from tagopen.slack_format import to_slack_mrkdwn
 from tagopen.llm import acompletion
 from tagopen.memory.store import MessageStore
 from tagopen.memory.writer import run_memory_curation
@@ -104,10 +105,12 @@ async def run_agent_loop(
         final_text = "Done."
 
     # Post reply to Slack
+    slack_text = to_slack_mrkdwn(final_text)
     await app.client.chat_postMessage(
         channel=channel_id,
-        text=final_text,
+        text=slack_text,
         thread_ts=thread_ts,
+        mrkdwn=True,
     )
 
     # Persist assistant reply

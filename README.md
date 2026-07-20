@@ -21,6 +21,14 @@
 
 ---
 
+> **Tango fork** — maintained at [toshiusklay/tango](https://github.com/toshiusklay/tango).  
+> Slack bot display name: **Tango**. Ops runbook (credentials, Contabo systemd): keep in your devops monorepo `apps/open-claude-tag/`.  
+> **Architecture:** standalone Slack Bolt + LiteLLM + SQLite — **not** OpenClaw or Hermes under the hood. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CHANGELOG.md](CHANGELOG.md).  
+> Upstream lineage: [Anil-matcha/open-claude-tag](https://github.com/Anil-matcha/open-claude-tag) (MIT).
+
+---
+
+
 **Open Claude Tag** is a free, self-hostable AI teammate for Slack that works the way Claude Tag does — one shared agent per channel, persistent memory, skill auto-creation, ambient monitoring — without Anthropic's paywall, without cloud lock-in, without the single-vendor constraint.
 
 > Most Slack AI bots are personal assistants — one context per user, isolated DMs. Open Claude Tag flips this: **one agent per channel, shared by the whole team.** Everyone sees the same context, picks up mid-thread, and the agent knows who said what.
