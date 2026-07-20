@@ -150,15 +150,19 @@ async def handle_message(event: dict, client) -> None:
             executor.status = status
             await status.llm_start()
             result = await executor.execute(row["tool_name"], args)
+            task = executor.task or task
+            # Stitch tool result into checkpoint so resume does not re-HITL
+            # the same call (orphan assistant tool_call without tool message).
+            task = await stitch_approval_into_task(
+                store, task, tool_name=row["tool_name"], result=result
+            )
             await client.chat_postMessage(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 text=f"Approved `{row['tool_name']}`.\n{result}",
             )
             get_worker(app).start()
-            await get_worker(app).run_task(
-                executor.task or task, store, event_ts=event["ts"]
-            )
+            await get_worker(app).run_task(task, store, event_ts=event["ts"])
         else:
             task = await svc.pause(task, f"Denied approval {approval_id}")
             await client.chat_postMessage(

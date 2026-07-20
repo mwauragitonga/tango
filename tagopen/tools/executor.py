@@ -71,10 +71,23 @@ class ToolExecutor:
             return f"Tool blocked: {decision.reason}"
 
         if decision.requires_approval and self.task is not None:
+            args_json = json.dumps(args)
+            # After bare-approve resume, models sometimes re-request the same
+            # run_python call. Refuse a second HITL for identical args.
+            prior = await self.task_store.find_recent_approved_same_call(
+                self.task.id, fn_name, args_json
+            )
+            if prior:
+                return (
+                    f"Tool `{fn_name}` with these args was already approved "
+                    f"({prior['id']}) and executed. Do not re-request approval. "
+                    "Use the prior tool result and continue with task_update / "
+                    "task_complete."
+                )
             aid = await self.task_store.create_approval(
                 task_id=self.task.id,
                 tool_name=fn_name,
-                args_json=json.dumps(args),
+                args_json=args_json,
                 requester_user_id=self.requester_user_id,
             )
             svc = TaskService(self.task_store)

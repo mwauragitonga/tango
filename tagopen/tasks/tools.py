@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from tagopen.tasks.models import StepStatus, Task
 from tagopen.tasks.service import TaskService
+
+_PAUSE_FOR_COMPLETION_RE = re.compile(
+    r"task_complete|approve_short|complet(e|ion|ing)|ready to (finish|complete)|done.?when",
+    re.I,
+)
 
 TASK_TOOL_SCHEMAS: list[dict] = [
     {
@@ -75,7 +81,12 @@ TASK_TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "task_pause",
-            "description": "Pause the durable task until resume.",
+            "description": (
+                "Pause only when waiting on a real external human/blocker "
+                "(not HITL tool approval — that uses waiting_approval automatically). "
+                "Do NOT pause when the next step is task_complete or when no human "
+                "input is needed; call task_complete instead."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"reason": {"type": "string"}},
@@ -158,7 +169,19 @@ async def dispatch_task_tool(
         return task, service.progress_text(task)
 
     if fn_name == "task_pause":
-        task = await service.pause(task, str(args.get("reason") or ""))
+        reason = str(args.get("reason") or "")
+        ready, _ = service.can_complete(task)
+        if ready:
+            return task, (
+                "Refuse task_pause: required steps are done — call task_complete "
+                "instead of pausing."
+            )
+        if _PAUSE_FOR_COMPLETION_RE.search(reason):
+            return task, (
+                "Refuse task_pause: reason looks like completion work. "
+                "Finish remaining steps or call task_complete; do not pause."
+            )
+        task = await service.pause(task, reason)
         return task, service.progress_text(task)
 
     if fn_name == "task_resume":

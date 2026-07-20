@@ -65,7 +65,12 @@ class ContextEngine:
                 "\n\n---\n\n## Active durable task\n\n"
                 f"{task.to_summary()}\n\n"
                 "Use task_plan / task_update / task_complete tools. "
-                "Do not claim completion until task_complete succeeds."
+                "Do not claim completion until task_complete succeeds.\n"
+                "Never call task_pause when the next action is task_complete or when "
+                "no real human blocker remains — call task_complete instead.\n"
+                "After a write tool was approved and its tool result is already in "
+                "this conversation, do not re-request the same tool; continue with "
+                "task_update / task_complete."
             )
         if memories:
             system += "\n\n---\n\n## Retrieved memories\n\n" + "\n".join(f"- {m}" for m in memories[:12])

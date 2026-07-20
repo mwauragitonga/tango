@@ -348,6 +348,40 @@ class SqliteTaskStore:
             row = await cur.fetchone()
         return dict(row) if row else None
 
+    async def find_recent_approved_same_call(
+        self,
+        task_id: str,
+        tool_name: str,
+        args_json: str,
+        *,
+        within_seconds: float = 900.0,
+    ) -> dict[str, Any] | None:
+        """Return a recent approved approval for the same tool+args (anti re-HITL loop)."""
+        since = time.time() - within_seconds
+        try:
+            want = json.dumps(json.loads(args_json), sort_keys=True)
+        except Exception:
+            want = args_json
+        async with self.db.execute(
+            """SELECT * FROM approvals
+               WHERE task_id = ? AND tool_name = ?
+                 AND status = 'approved'
+                 AND COALESCE(resolved_at, created_at) >= ?
+               ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 20""",
+            (task_id, tool_name, since),
+        ) as cur:
+            rows = await cur.fetchall()
+        for row in rows:
+            d = dict(row)
+            raw = d.get("args_json") or ""
+            try:
+                got = json.dumps(json.loads(raw), sort_keys=True)
+            except Exception:
+                got = raw
+            if got == want:
+                return d
+        return None
+
 
 _task_stores: dict[str, SqliteTaskStore] = {}
 
