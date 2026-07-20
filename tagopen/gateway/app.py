@@ -12,6 +12,7 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 from tagopen.agent.loop import strip_bot_mention
 from tagopen.config import settings
+from tagopen.gateway.approve import parse_approve_command
 from tagopen.gateway.router import route_message
 from tagopen.memory.store import get_store
 from tagopen.scheduler.service import start_scheduler
@@ -24,8 +25,6 @@ from tagopen.tools.executor import ToolExecutor
 logger = logging.getLogger(__name__)
 
 app = AsyncApp(token=settings.slack_bot_token)
-
-_APPROVE = re.compile(r"^\s*(approve|deny)\s+(\S+)\s*$", re.I)
 
 
 @app.event("app_mention")
@@ -89,10 +88,27 @@ async def handle_message(event: dict, client) -> None:
     user_id = event["user"]
     workspace_id = (await client.auth_test())["team_id"]
 
-    m = _APPROVE.match(text)
-    if m:
-        action, approval_id = m.group(1).lower(), m.group(2)
+    parsed = parse_approve_command(text)
+    if parsed:
+        action, approval_id = parsed
         store = await get_task_store(workspace_id)
+        if not approval_id:
+            task_for_thread = await store.get_by_thread(
+                workspace_id, channel_id, thread_ts
+            )
+            pending = (
+                await store.get_pending_approval_for_task(task_for_thread.id)
+                if task_for_thread
+                else None
+            )
+            if not pending:
+                await client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text="No pending approval in this thread.",
+                )
+                return
+            approval_id = pending["id"]
         row = await store.resolve_approval(
             approval_id,
             "approved" if action == "approve" else "denied",

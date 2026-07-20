@@ -80,7 +80,7 @@ class ToolExecutor:
             svc = TaskService(self.task_store)
             self.task = await svc.mark_waiting_approval(
                 self.task,
-                f"Approve `{fn_name}` (id `{aid}`): reply `approve {aid}` or `deny {aid}`",
+                f"Approve `{fn_name}` (id `{aid}`): reply `approve` or `deny` (id optional)",
             )
             if self.app:
                 await self.app.client.chat_postMessage(
@@ -89,7 +89,8 @@ class ToolExecutor:
                     text=(
                         f"⚠️ Approval needed for `{fn_name}`\n"
                         f"```{json.dumps(args, indent=2)[:1500]}```\n"
-                        f"Reply `approve {aid}` or `deny {aid}` in this thread."
+                        f"Reply `approve` or `deny` in this thread "
+                        f"(or `approve {aid}` / `deny {aid}`)."
                     ),
                 )
             raise ApprovalRequired(aid, fn_name, args)

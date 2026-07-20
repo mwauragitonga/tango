@@ -9,6 +9,7 @@ import socket
 import time
 from typing import TYPE_CHECKING, Any
 
+from tagopen.ambient.heartbeat import _is_slack_ts
 from tagopen.config import settings
 from tagopen.context.engine import ContextEngine
 from tagopen.llm.gateway import LLMRequestContext, complete
@@ -80,6 +81,14 @@ class TaskWorker:
         if task.status in TERMINAL_STATUSES:
             return
         svc = TaskService(store)
+        if not _is_slack_ts(task.thread_ts):
+            await svc.cancel(task, "invalid_thread_ts")
+            logger.warning(
+                "Cancelled task %s: thread_ts is not a real Slack ts (%r)",
+                task.id,
+                task.thread_ts,
+            )
+            return
         msg_store = await get_store(task.workspace_id, task.channel_id)
         engine = ContextEngine()
         engine.usage.context_window = settings.model_context_window

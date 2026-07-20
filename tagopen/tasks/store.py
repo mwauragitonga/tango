@@ -161,11 +161,18 @@ class SqliteTaskStore:
 
     async def claim_next(self, worker_id: str, lease_seconds: float = 120.0) -> Task | None:
         now = time.time()
+        # Prefer real user work over leftover heartbeat durable tasks.
         async with self.db.execute(
             """SELECT id FROM tasks
                WHERE status IN ('queued', 'resume_pending', 'planning', 'running', 'verifying')
                  AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at < ?)
-               ORDER BY updated_at ASC
+               ORDER BY
+                 CASE
+                   WHEN requester_user_id != 'heartbeat'
+                    AND objective NOT LIKE '[heartbeat]%'
+                   THEN 0 ELSE 1
+                 END,
+                 updated_at ASC
                LIMIT 1""",
             (now,),
         ) as cur:
