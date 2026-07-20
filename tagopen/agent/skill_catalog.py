@@ -30,6 +30,21 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return meta, body
 
 
+_IMPORT_NOISE_RE = re.compile(
+    r"\s*\(Hermes playbook[^)]*\)\s*$",
+    re.I,
+)
+
+
+def _clean_description(desc: str) -> str:
+    """Strip import boilerplate so match signal stays in the trigger text."""
+    desc = _IMPORT_NOISE_RE.sub("", (desc or "").strip())
+    # Cap for prompt index (Hermes-style metadata tier)
+    if len(desc) > 220:
+        desc = desc[:217].rstrip() + "…"
+    return desc
+
+
 def list_skill_summaries(channel_id: str) -> list[dict[str, str]]:
     """Return active skills as {name, description} for the system prompt index."""
     root = skills_dir(channel_id)
@@ -49,7 +64,7 @@ def list_skill_summaries(channel_id: str) -> list[dict[str, str]]:
                 if line and not line.startswith("#"):
                     desc = line[:160]
                     break
-        out.append({"name": name, "description": desc or "(no description)"})
+        out.append({"name": name, "description": _clean_description(desc) or "(no description)"})
     return out
 
 
@@ -58,13 +73,21 @@ def format_skills_index(channel_id: str) -> str:
     if not summaries:
         return ""
     lines = [
-        "## Skills (progressive — Hermes-style)",
-        "Call `skills_list` for the catalog, then `skill_view(name)` to load a full playbook before following it.",
-        "Do **not** invent skill contents — load them with tools.",
+        "## Skills (mandatory — Hermes-style progressive disclosure)",
+        "Before replying, scan the skills below. If a skill matches or is even *partially* "
+        "relevant to the user's task, you MUST call `skill_view(name=<skill>)` and follow "
+        "its instructions before answering. Err on the side of loading — better to have "
+        "context you do not need than to miss an established playbook.",
+        "Examples: natural/human voice rewrite or strip AI-isms → `humanizer`; SEO audit → "
+        "`seo-audit`; GitHub PR/issue help → `github`; standup digest → `standup-notes`.",
+        "Do **not** invent skill contents. Do **not** wait for the user to name `skill_view`.",
+        "Host shell/DB/SSH steps in a playbook require confirm + `hermes_ask` (if available).",
         "",
+        "<available_skills>",
     ]
     for s in summaries:
-        lines.append(f"- `{s['name']}` — {s['description']}")
+        lines.append(f"- {s['name']}: {s['description']}")
+    lines.append("</available_skills>")
     return "\n".join(lines)
 
 

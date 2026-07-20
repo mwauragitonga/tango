@@ -77,10 +77,41 @@ _find_skill() {
   echo "$src"
 }
 
+# Short trigger-rich overrides so NL matching stays sharp (no import boilerplate).
+_desc_override() {
+  case "$1" in
+    humanizer)
+      echo "Humanize text: strip AI-isms, buzzwords, and corporate tone; rewrite in a natural human voice."
+      ;;
+    seo-audit)
+      echo "Audit or diagnose SEO issues, rankings, on-page SEO, meta tags, technical SEO health."
+      ;;
+    social-content)
+      echo "Create or optimize social posts for LinkedIn, Twitter/X, Instagram, TikTok, content calendars."
+      ;;
+    github)
+      echo "GitHub operations via gh: repos, PRs, code review, issues, analytics."
+      ;;
+    standup-notes)
+      echo "Turn messy channel chatter into a short standup summary."
+      ;;
+    creative-ideation|ideation)
+      echo "Generate project ideas via creative constraints."
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 _extract_description() {
   local file="$1"
   local name="$2"
   local desc
+  if desc="$(_desc_override "$name")"; then
+    echo "$desc"
+    return 0
+  fi
   desc=$(awk '
     BEGIN { in_fm=0 }
     /^---[[:space:]]*$/ { if (++in_fm==2) exit; next }
@@ -92,12 +123,10 @@ _extract_description() {
     }
   ' "$file" 2>/dev/null || true)
   if [[ -z "${desc:-}" ]]; then
-    desc="Imported from Hermes skill ${name} (playbook only)"
-  else
-    desc="${desc} (Hermes playbook — confirm then hermes_ask for host exec)"
+    desc="Playbook for ${name}"
   fi
-  # Keep single-line for frontmatter
-  echo "$desc" | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+  # Keep single-line; do not append Hermes boilerplate (hurts skill matching)
+  echo "$desc" | tr '\n' ' ' | sed 's/[[:space:]]*$//' | cut -c1-220
 }
 
 for name in "${SKILLS[@]}"; do

@@ -103,7 +103,11 @@ BUILTIN_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "skills_list",
-            "description": "List channel skills (name + description). Use skill_view to load a full playbook.",
+            "description": (
+                "List channel skills (name + description only). "
+                "Prefer matching from the system skills index; call this if you need a refresh. "
+                "Then skill_view(name) before following a playbook."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -114,7 +118,15 @@ BUILTIN_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "skill_view",
-            "description": "Load the full markdown body of a channel skill by name before following its steps.",
+            "description": (
+                "Load a channel skill playbook by name and follow it. "
+                "Call proactively when the user task matches a skill description — "
+                "do not wait for the user to say skill_view. "
+                "Triggers include: humanize/rewrite/natural voice/de-AI → humanizer; "
+                "SEO audit/ranking → seo-audit; social posts → social-content; "
+                "GitHub PRs/issues → github; standup summary → standup-notes; "
+                "prod ops/monitoring → production-operations / production-monitoring."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
