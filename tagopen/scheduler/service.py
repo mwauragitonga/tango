@@ -17,39 +17,42 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _scheduler = None
+_app: "AsyncApp | None" = None
 
 
 async def start_scheduler(app: "AsyncApp") -> None:
-    global _scheduler
+    """Start a lightweight interval tick. Durable schedules live in SQLite `schedules`."""
+    global _scheduler, _app
+    _app = app
     if not settings.ambient_enabled:
         logger.info("Ambient scheduler disabled")
         return
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
     except ImportError:
         logger.warning("APScheduler not installed — ambient schedules disabled")
         return
 
-    db_url = f"sqlite:///{settings.data_dir / 'scheduler.db'}"
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    jobstores = {"default": SQLAlchemyJobStore(url=db_url)}
-    _scheduler = AsyncIOScheduler(jobstores=jobstores)
+    # Memory job store only — do NOT pickle AsyncApp into SQLAlchemy.
+    # Channel schedules are persisted in our own `schedules` table.
+    _scheduler = AsyncIOScheduler()
     _scheduler.start()
-
-    # Tick every minute: enqueue due schedules + heartbeat observations
     _scheduler.add_job(
         _tick,
         "interval",
         minutes=1,
         id="tango_scheduler_tick",
         replace_existing=True,
-        kwargs={"app": app},
+        max_instances=1,
+        coalesce=True,
     )
-    logger.info("Ambient scheduler started (enqueue-only)")
+    logger.info("Ambient scheduler started (enqueue-only, memory tick)")
 
 
-async def _tick(app: "AsyncApp") -> None:
+async def _tick() -> None:
+    app = _app
+    if app is None:
+        return
     from pathlib import Path
 
     from tagopen.ambient.heartbeat import run_heartbeat_enqueue
@@ -60,9 +63,12 @@ async def _tick(app: "AsyncApp") -> None:
     for ws_dir in root.iterdir():
         if not ws_dir.is_dir():
             continue
-        store = await get_task_store(ws_dir.name)
-        await _enqueue_due_schedules(app, store, ws_dir.name)
-        await run_heartbeat_enqueue(app, store, ws_dir.name)
+        try:
+            store = await get_task_store(ws_dir.name)
+            await _enqueue_due_schedules(app, store, ws_dir.name)
+            await run_heartbeat_enqueue(app, store, ws_dir.name)
+        except Exception:
+            logger.exception("Scheduler tick failed for workspace %s", ws_dir.name)
 
 
 async def _enqueue_due_schedules(app: "AsyncApp", store, workspace_id: str) -> None:
@@ -74,9 +80,11 @@ async def _enqueue_due_schedules(app: "AsyncApp", store, workspace_id: str) -> N
         (workspace_id, now),
     ) as cur:
         rows = await cur.fetchall()
+    if not rows:
+        return
     svc = TaskService(store)
     for row in rows:
-        task = await svc.create_task(
+        await svc.create_task(
             workspace_id=workspace_id,
             channel_id=row["channel_id"],
             thread_ts=f"schedule-{row['id']}-{int(now)}",
@@ -85,12 +93,11 @@ async def _enqueue_due_schedules(app: "AsyncApp", store, workspace_id: str) -> N
         )
         await store.db.execute(
             "UPDATE schedules SET last_run_at = ?, next_run_at = ? WHERE id = ?",
-            (now, now + 3600, row["id"]),  # simple hourly bump; cron parsed in tools
+            (now, now + 3600, row["id"]),
         )
         await store.db.commit()
-        logger.info("Enqueued schedule %s as task %s", row["id"], task.id)
-    if rows:
-        get_worker(app).start()
+        logger.info("Enqueued schedule %s", row["id"])
+    get_worker(app).start()
 
 
 def get_scheduler():
