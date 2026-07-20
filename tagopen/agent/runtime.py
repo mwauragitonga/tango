@@ -28,7 +28,8 @@ from tagopen.llm import (
 from tagopen.llm.gateway import LLMRequestContext, complete
 from tagopen.memory.store import MessageStore
 from tagopen.memory.writer import run_memory_curation
-from tagopen.slack_format import to_slack_mrkdwn
+from tagopen.slack_post import post_thread_messages
+from tagopen.slack_status import SlackStatus
 from tagopen.tasks.store import get_task_store
 from tagopen.tools.executor import ToolExecutor
 from tagopen.tools.registry import get_channel_tools
@@ -118,6 +119,12 @@ async def run_inline_turn(
     )
 
     task_store = await get_task_store(workspace_id)
+    status = SlackStatus(
+        app.client,
+        channel_id=channel_id,
+        thread_ts=thread_ts,
+        event_ts=event_ts,
+    )
     executor = ToolExecutor(
         app=app,
         workspace_id=workspace_id,
@@ -127,6 +134,7 @@ async def run_inline_turn(
         task_store=task_store,
         task=None,
         message_store=store,
+        status=status,
     )
 
     tool_call_count = 0
@@ -140,55 +148,61 @@ async def run_inline_turn(
         purpose="agent",
     )
 
-    for _round in range(settings.max_tool_rounds_inline):
-        response, notice = await complete(
-            ctx,
-            messages=[{"role": "system", "content": system_prompt}] + messages,
-            tools=tools or None,
-            tool_choice="auto" if tools else None,
-            task_store=task_store,
+    try:
+        for _round in range(settings.max_tool_rounds_inline):
+            await status.llm_start()
+            response, notice = await complete(
+                ctx,
+                messages=[{"role": "system", "content": system_prompt}] + messages,
+                tools=tools or None,
+                tool_choice="auto" if tools else None,
+                task_store=task_store,
+            )
+            if notice and not failover_notice:
+                failover_notice = notice
+
+            choice = response.choices[0]
+            msg = choice.message
+            if not msg.tool_calls:
+                final_text = msg.content or ""
+                break
+
+            messages.append(msg.model_dump(exclude_none=True))
+            for tc in msg.tool_calls:
+                tool_call_count += 1
+                fn_name = tc.function.name
+                fn_args = json.loads(tc.function.arguments or "{}")
+                logger.info("Tool call: %s(%s) in channel=%s", fn_name, fn_args, channel_id)
+                result = await executor.execute(fn_name, fn_args)
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(result)})
+        else:
+            final_text = "I reached my tool call limit. Here's what I found so far."
+
+        if not final_text:
+            final_text = "Done."
+        if failover_notice:
+            final_text = f"{failover_notice}\n\n{final_text}"
+
+        await _post_reply(app, channel_id, thread_ts, final_text)
+        await store.add_message(
+            ts=str(time.time()),
+            role="assistant",
+            user_id="agent",
+            display_name="agent",
+            content=final_text,
+            thread_ts=thread_ts,
         )
-        if notice and not failover_notice:
-            failover_notice = notice
 
-        choice = response.choices[0]
-        msg = choice.message
-        if not msg.tool_calls:
-            final_text = msg.content or ""
-            break
+        asyncio.create_task(
+            run_memory_curation(
+                channel_id, system_prompt, messages, final_text, thread_ts=thread_ts
+            )
+        )
 
-        messages.append(msg.model_dump(exclude_none=True))
-        for tc in msg.tool_calls:
-            tool_call_count += 1
-            fn_name = tc.function.name
-            fn_args = json.loads(tc.function.arguments or "{}")
-            logger.info("Tool call: %s(%s) in channel=%s", fn_name, fn_args, channel_id)
-            result = await executor.execute(fn_name, fn_args)
-            messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(result)})
-    else:
-        final_text = "I reached my tool call limit. Here's what I found so far."
-
-    if not final_text:
-        final_text = "Done."
-    if failover_notice:
-        final_text = f"{failover_notice}\n\n{final_text}"
-
-    await _post_reply(app, channel_id, thread_ts, final_text)
-    await store.add_message(
-        ts=str(time.time()),
-        role="assistant",
-        user_id="agent",
-        display_name="agent",
-        content=final_text,
-        thread_ts=thread_ts,
-    )
-
-    asyncio.create_task(
-        run_memory_curation(channel_id, system_prompt, messages, final_text, thread_ts=thread_ts)
-    )
-
-    if tool_call_count >= 5:
-        await maybe_create_skill(channel_id, messages, final_text, tool_call_count)
+        if tool_call_count >= 5:
+            await maybe_create_skill(channel_id, messages, final_text, tool_call_count)
+    finally:
+        await status.finish()
 
 
 async def _handle_model_command(cmd, channel_id: str, thread_ts: str, store: MessageStore) -> str:
@@ -222,11 +236,9 @@ async def _handle_model_command(cmd, channel_id: str, thread_ts: str, store: Mes
 
 
 async def _post_reply(app: "AsyncApp", channel_id: str, thread_ts: str, text: str) -> None:
-    await asyncio.wait_for(
-        app.client.chat_postMessage(
-            channel=channel_id,
-            thread_ts=thread_ts,
-            text=to_slack_mrkdwn(text),
-        ),
-        timeout=settings.slack_timeout_seconds,
+    await post_thread_messages(
+        app.client,
+        channel=channel_id,
+        thread_ts=thread_ts,
+        text=text,
     )

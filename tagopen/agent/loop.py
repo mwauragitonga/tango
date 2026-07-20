@@ -100,7 +100,7 @@ async def run_agent_loop(
         task.lease_expires_at = time.time() + 120
         await task_store.save(task)
         get_worker(app).start()
-        await get_worker(app).run_task(task, task_store)
+        await get_worker(app).run_task(task, task_store, event_ts=event_ts)
         return
 
     await run_inline_turn(

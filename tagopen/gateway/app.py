@@ -15,6 +15,7 @@ from tagopen.config import settings
 from tagopen.gateway.router import route_message
 from tagopen.memory.store import get_store
 from tagopen.scheduler.service import start_scheduler
+from tagopen.slack_status import SlackStatus
 from tagopen.tasks.service import TaskService
 from tagopen.tasks.store import get_task_store
 from tagopen.tasks.worker import get_worker
@@ -112,6 +113,14 @@ async def handle_message(event: dict, client) -> None:
                 channel_policy={"auto_approve_writes": True},
                 message_store=msg_store,
             )
+            status = SlackStatus(
+                client,
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                event_ts=event["ts"],
+            )
+            executor.status = status
+            await status.llm_start()
             result = await executor.execute(row["tool_name"], args)
             await client.chat_postMessage(
                 channel=channel_id,
@@ -119,7 +128,9 @@ async def handle_message(event: dict, client) -> None:
                 text=f"Approved `{row['tool_name']}`.\n{result}",
             )
             get_worker(app).start()
-            await get_worker(app).run_task(executor.task or task, store)
+            await get_worker(app).run_task(
+                executor.task or task, store, event_ts=event["ts"]
+            )
         else:
             task = await svc.pause(task, f"Denied approval {approval_id}")
             await client.chat_postMessage(
@@ -138,7 +149,7 @@ async def handle_message(event: dict, client) -> None:
                 svc = TaskService(store)
                 task = await svc.resume(task)
                 get_worker(app).start()
-                await get_worker(app).run_task(task, store)
+                await get_worker(app).run_task(task, store, event_ts=event["ts"])
                 return
         # Mentions inside threads: route as normal agent turn
         if "<@" in (event.get("text") or ""):

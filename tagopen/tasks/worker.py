@@ -17,9 +17,10 @@ from tagopen.tasks.models import Task, TaskStatus, TERMINAL_STATUSES
 from tagopen.tasks.service import TaskService
 from tagopen.tasks.store import SqliteTaskStore, get_task_store
 from tagopen.tasks.tools import TASK_TOOL_SCHEMAS
+from tagopen.slack_post import post_thread_messages
+from tagopen.slack_status import SlackStatus
 from tagopen.tools.executor import ApprovalRequired, ToolExecutor
 from tagopen.tools.registry import get_channel_tools
-from tagopen.slack_format import to_slack_mrkdwn
 
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
@@ -69,7 +70,13 @@ class TaskWorker:
             except asyncio.TimeoutError:
                 pass
 
-    async def run_task(self, task: Task, store: SqliteTaskStore) -> None:
+    async def run_task(
+        self,
+        task: Task,
+        store: SqliteTaskStore,
+        *,
+        event_ts: str | None = None,
+    ) -> None:
         if task.status in TERMINAL_STATUSES:
             return
         svc = TaskService(store)
@@ -97,6 +104,12 @@ class TaskWorker:
         except Exception:
             messages = []
 
+        status = SlackStatus(
+            self.app.client,
+            channel_id=task.channel_id,
+            thread_ts=task.thread_ts,
+            event_ts=event_ts,
+        )
         executor = ToolExecutor(
             app=self.app,
             workspace_id=task.workspace_id,
@@ -106,144 +119,155 @@ class TaskWorker:
             task_store=store,
             task=task,
             message_store=msg_store,
+            status=status,
         )
 
         failover_notice = None
         final_text = ""
         max_rounds = min(task.max_turns - task.turns_used, settings.max_tool_rounds)
 
-        for _ in range(max(1, max_rounds)):
-            await store.heartbeat(task.id, WORKER_ID)
-            task = await store.get(task.id) or task
-            if task.status in {
-                TaskStatus.PAUSED,
-                TaskStatus.WAITING_APPROVAL,
-                TaskStatus.WAITING_EXTERNAL,
-                TaskStatus.CANCELLED,
-            }:
-                return
-            if task.status in TERMINAL_STATUSES:
-                return
+        try:
+            for _ in range(max(1, max_rounds)):
+                await store.heartbeat(task.id, WORKER_ID)
+                task = await store.get(task.id) or task
+                if task.status in {
+                    TaskStatus.PAUSED,
+                    TaskStatus.WAITING_APPROVAL,
+                    TaskStatus.WAITING_EXTERNAL,
+                    TaskStatus.CANCELLED,
+                }:
+                    return
+                if task.status in TERMINAL_STATUSES:
+                    return
 
-            system, built = await engine.build_context(
-                channel_id=task.channel_id,
-                user_map=user_map,
-                tool_schemas=tools,
-                store=msg_store,
-                thread_ts=task.thread_ts,
-                current_user=task.requester_user_id,
-                current_text=task.objective,
-                task=task,
-            )
-            if not messages:
-                messages = built
-
-            ctx = LLMRequestContext(
-                workspace_id=task.workspace_id,
-                channel_id=task.channel_id,
-                thread_ts=task.thread_ts,
-                slack_user_id=task.requester_user_id,
-                task_id=task.id,
-                purpose="agent",
-            )
-            try:
-                response, notice = await complete(
-                    ctx,
-                    messages=[{"role": "system", "content": system}] + messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    task_store=store,
+                system, built = await engine.build_context(
+                    channel_id=task.channel_id,
+                    user_map=user_map,
+                    tool_schemas=tools,
+                    store=msg_store,
+                    thread_ts=task.thread_ts,
+                    current_user=task.requester_user_id,
+                    current_text=task.objective,
+                    task=task,
                 )
-            except Exception as e:
-                # transient → leave resume_pending for retry
-                logger.warning("LLM error on task %s: %s", task.id, e)
-                task.status = TaskStatus.RESUME_PENDING
-                task.blocker = f"LLM error: {e}"
-                task.lease_owner = None
-                task.lease_expires_at = None
-                await store.save(task)
-                await self._maybe_progress(task, svc, force=True)
-                return
+                if not messages:
+                    messages = built
 
-            if notice and not failover_notice:
-                failover_notice = notice
-            usage = getattr(response, "usage", None)
-            if usage:
-                engine.update_usage(
-                    int(getattr(usage, "prompt_tokens", 0) or 0),
-                    int(getattr(usage, "completion_tokens", 0) or 0),
-                    int(getattr(usage, "total_tokens", 0) or 0),
+                ctx = LLMRequestContext(
+                    workspace_id=task.workspace_id,
+                    channel_id=task.channel_id,
+                    thread_ts=task.thread_ts,
+                    slack_user_id=task.requester_user_id,
+                    task_id=task.id,
+                    purpose="agent",
                 )
-                if engine.should_compact():
-                    messages, summary = await engine.compact(
-                        messages=messages,
-                        task=task,
-                        llm_complete=lambda c, messages: complete(
-                            c,
-                            messages=messages,
-                            task_store=store,
-                        ),
-                        ctx=ctx,
+                try:
+                    await status.llm_start()
+                    response, notice = await complete(
+                        ctx,
+                        messages=[{"role": "system", "content": system}] + messages,
+                        tools=tools,
+                        tool_choice="auto",
                         task_store=store,
                     )
-                    if summary:
-                        messages = [
-                            {"role": "user", "content": f"[Earlier context summary]\n{summary}"}
-                        ] + messages
-
-            choice = response.choices[0]
-            msg = choice.message
-            task.turns_used += 1
-            if not msg.tool_calls:
-                final_text = msg.content or ""
-                break
-
-            messages.append(msg.model_dump(exclude_none=True))
-            for tc in msg.tool_calls:
-                fn_name = tc.function.name
-                fn_args = json.loads(tc.function.arguments or "{}")
-                try:
-                    result = await executor.execute(fn_name, fn_args)
-                    task = executor.task or task
-                except ApprovalRequired as ar:
-                    await self._checkpoint(store, task, messages)
-                    await self._post(
-                        task,
-                        f"Paused for approval of `{ar.tool_name}` (`{ar.approval_id}`).",
-                    )
+                except Exception as e:
+                    # transient → leave resume_pending for retry
+                    logger.warning("LLM error on task %s: %s", task.id, e)
+                    task.status = TaskStatus.RESUME_PENDING
+                    task.blocker = f"LLM error: {e}"
+                    task.lease_owner = None
+                    task.lease_expires_at = None
+                    await store.save(task)
+                    await self._maybe_progress(task, svc, force=True)
                     return
-                messages.append(
-                    {"role": "tool", "tool_call_id": tc.id, "content": str(result)}
-                )
-            await self._checkpoint(store, task, messages)
-            await self._maybe_progress(task, svc)
-            if task.status in TERMINAL_STATUSES | {
-                TaskStatus.PAUSED,
-                TaskStatus.WAITING_APPROVAL,
-            }:
-                if task.status == TaskStatus.COMPLETED:
-                    await self._post(task, final_text or task.to_summary())
-                return
-        else:
-            final_text = final_text or "Still working — hit turn budget for this slice; will resume."
-            task.status = TaskStatus.RESUME_PENDING
-            task.lease_owner = None
-            task.lease_expires_at = None
 
-        if failover_notice:
-            final_text = f"{failover_notice}\n\n{final_text}"
-        await self._checkpoint(store, task, messages)
-        await store.save(task)
-        if final_text:
-            await self._post(task, final_text)
-            await msg_store.add_message(
-                ts=str(time.time()),
-                role="assistant",
-                user_id="agent",
-                display_name="agent",
-                content=final_text,
-                thread_ts=task.thread_ts,
-            )
+                if notice and not failover_notice:
+                    failover_notice = notice
+                usage = getattr(response, "usage", None)
+                if usage:
+                    engine.update_usage(
+                        int(getattr(usage, "prompt_tokens", 0) or 0),
+                        int(getattr(usage, "completion_tokens", 0) or 0),
+                        int(getattr(usage, "total_tokens", 0) or 0),
+                    )
+                    if engine.should_compact():
+                        messages, summary = await engine.compact(
+                            messages=messages,
+                            task=task,
+                            llm_complete=lambda c, messages: complete(
+                                c,
+                                messages=messages,
+                                task_store=store,
+                            ),
+                            ctx=ctx,
+                            task_store=store,
+                        )
+                        if summary:
+                            messages = [
+                                {
+                                    "role": "user",
+                                    "content": f"[Earlier context summary]\n{summary}",
+                                }
+                            ] + messages
+
+                choice = response.choices[0]
+                msg = choice.message
+                task.turns_used += 1
+                if not msg.tool_calls:
+                    final_text = msg.content or ""
+                    break
+
+                messages.append(msg.model_dump(exclude_none=True))
+                for tc in msg.tool_calls:
+                    fn_name = tc.function.name
+                    fn_args = json.loads(tc.function.arguments or "{}")
+                    try:
+                        result = await executor.execute(fn_name, fn_args)
+                        task = executor.task or task
+                    except ApprovalRequired as ar:
+                        await self._checkpoint(store, task, messages)
+                        await self._post(
+                            task,
+                            f"Paused for approval of `{ar.tool_name}` (`{ar.approval_id}`).",
+                        )
+                        return
+                    messages.append(
+                        {"role": "tool", "tool_call_id": tc.id, "content": str(result)}
+                    )
+                await self._checkpoint(store, task, messages)
+                await self._maybe_progress(task, svc)
+                if task.status in TERMINAL_STATUSES | {
+                    TaskStatus.PAUSED,
+                    TaskStatus.WAITING_APPROVAL,
+                }:
+                    if task.status == TaskStatus.COMPLETED:
+                        await self._post(task, final_text or task.to_summary())
+                    return
+            else:
+                final_text = (
+                    final_text
+                    or "Still working — hit turn budget for this slice; will resume."
+                )
+                task.status = TaskStatus.RESUME_PENDING
+                task.lease_owner = None
+                task.lease_expires_at = None
+
+            if failover_notice:
+                final_text = f"{failover_notice}\n\n{final_text}"
+            await self._checkpoint(store, task, messages)
+            await store.save(task)
+            if final_text:
+                await self._post(task, final_text)
+                await msg_store.add_message(
+                    ts=str(time.time()),
+                    role="assistant",
+                    user_id="agent",
+                    display_name="agent",
+                    content=final_text,
+                    thread_ts=task.thread_ts,
+                )
+        finally:
+            await status.finish()
 
     async def _checkpoint(self, store: SqliteTaskStore, task: Task, messages: list[dict]) -> None:
         # Keep last 40 messages in checkpoint to bound size
@@ -262,13 +286,11 @@ class TaskWorker:
 
     async def _post(self, task: Task, text: str) -> None:
         try:
-            await asyncio.wait_for(
-                self.app.client.chat_postMessage(
-                    channel=task.channel_id,
-                    thread_ts=task.thread_ts,
-                    text=to_slack_mrkdwn(text),
-                ),
-                timeout=settings.slack_timeout_seconds,
+            await post_thread_messages(
+                self.app.client,
+                channel=task.channel_id,
+                thread_ts=task.thread_ts,
+                text=text,
             )
         except Exception:
             logger.exception("Failed to post progress for task %s", task.id)

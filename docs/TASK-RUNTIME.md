@@ -17,6 +17,8 @@ Terminal: `completed`, `failed`, `cancelled`, `suspended`. Restart recovery uses
 
 `tagopen/tasks/worker.py` claims leases, heartbeats, checkpoints after model/tool/approval transitions, posts Slack progress on meaningful changes or every `PROGRESS_INTERVAL_SECONDS`.
 
+Long replies are chunked into ordered thread messages (`tagopen/slack_post.py`). Tool activity uses reactions on the triggering message when `event_ts` is available, otherwise a short status post (`tagopen/slack_status.py`).
+
 Thread commands: `status`, `pause`, `resume`, `cancel`.
 
 ## Intake

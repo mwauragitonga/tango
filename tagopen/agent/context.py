@@ -102,7 +102,13 @@ def build_system_prompt(
         "Replies are posted as Slack mrkdwn. Prefer *bold* (single asterisks), "
         "_italic_, `code`, and bullet lists with - or •. "
         "Do not use Markdown **double asterisks** or # headings. "
-        "When citing web search results, include the URL on its own line."
+        "When citing web search results, include the URL on its own line.\n\n"
+        "Multi-file apps / scaffolds: post a short plan first, then one file "
+        "(or a small related group) per message with the path as a heading. "
+        "If more than ~4–5 files or a large scaffold, outline + key files only "
+        "and ask which to expand — unless the user asks for a full dump. "
+        "Prefer a durable task (`task_plan` / `task_update` / related task_* tools) "
+        "when the user asks to build an app."
     )
 
     if tool_schemas is not None:

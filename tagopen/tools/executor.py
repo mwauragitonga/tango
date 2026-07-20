@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
 
     from tagopen.memory.store import MessageStore
+    from tagopen.slack_status import SlackStatus
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class ToolExecutor:
         task: Task | None = None,
         channel_policy: dict[str, Any] | None = None,
         message_store: MessageStore | None = None,
+        status: "SlackStatus | None" = None,
     ) -> None:
         self.app = app
         self.workspace_id = workspace_id
@@ -56,6 +58,7 @@ class ToolExecutor:
         self.task = task
         self.channel_policy = channel_policy or {}
         self.message_store = message_store
+        self.status = status
 
     async def execute(self, fn_name: str, args: dict[str, Any]) -> Any:
         started = time.time()
@@ -91,20 +94,26 @@ class ToolExecutor:
                 )
             raise ApprovalRequired(aid, fn_name, args)
 
+        if self.status:
+            await self.status.tool_start(fn_name)
         try:
-            result = await asyncio.wait_for(
-                self._dispatch(fn_name, args),
-                timeout=settings.tool_timeout_seconds,
-            )
-            success = True
-            error_class = ""
-        except ApprovalRequired:
-            raise
-        except Exception as e:
-            result = f"Tool error: {e}"
-            success = False
-            error_class = type(e).__name__
-            logger.exception("Tool %s failed", fn_name)
+            try:
+                result = await asyncio.wait_for(
+                    self._dispatch(fn_name, args),
+                    timeout=settings.tool_timeout_seconds,
+                )
+                success = True
+                error_class = ""
+            except ApprovalRequired:
+                raise
+            except Exception as e:
+                result = f"Tool error: {e}"
+                success = False
+                error_class = type(e).__name__
+                logger.exception("Tool %s failed", fn_name)
+        finally:
+            if self.status:
+                await self.status.tool_end(fn_name)
 
         latency = (time.time() - started) * 1000
         await self.task_store.record_tool_execution(
