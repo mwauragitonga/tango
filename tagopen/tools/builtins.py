@@ -7,6 +7,7 @@ import sys
 from io import StringIO
 from typing import Any
 
+from tagopen.agent.skill_catalog import skill_view, skills_list_text
 from tagopen.tools.web_search import search_web
 
 logger = logging.getLogger(__name__)
@@ -87,10 +88,42 @@ BUILTIN_TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "skills_list",
+            "description": "List channel skills (name + description). Use skill_view to load a full playbook.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_view",
+            "description": "Load the full markdown body of a channel skill by name before following its steps.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Skill name (filename stem or frontmatter name)",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
 ]
 
 
-async def dispatch_builtin(fn_name: str, args: dict[str, Any]) -> Any:
+async def dispatch_builtin(
+    fn_name: str,
+    args: dict[str, Any],
+    channel_id: str | None = None,
+) -> Any:
     if fn_name == "web_search":
         return await search_web(args["query"])
     if fn_name == "run_python":
@@ -98,6 +131,14 @@ async def dispatch_builtin(fn_name: str, args: dict[str, Any]) -> Any:
     if fn_name == "search_channel_history":
         # Actual search happens in dispatch_tool after store lookup; return placeholder
         return args
+    if fn_name == "skills_list":
+        if not channel_id:
+            return "skills_list requires a channel context."
+        return skills_list_text(channel_id)
+    if fn_name == "skill_view":
+        if not channel_id:
+            return "skill_view requires a channel context."
+        return skill_view(channel_id, args.get("name", ""))
     return f"Unknown built-in: {fn_name}"
 
 

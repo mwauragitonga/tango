@@ -14,8 +14,13 @@ class Settings(BaseSettings):
 
     # LLM — LiteLLM model string, e.g. "gpt-4o", "claude-sonnet-4-6", "gemini/gemini-2.0-flash"
     llm_model: str = "claude-sonnet-4-6"
+    # Comma-separated allowlist for @Tango model … (empty = allow any)
+    llm_model_allowlist: str = ""
+    # Comma-separated turn-local failover models (OpenClaw-style; not sticky)
+    llm_fallbacks: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    openai_api_base: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
 
@@ -38,6 +43,7 @@ class Settings(BaseSettings):
     default_max_tokens_per_request: int = 50_000
     default_max_tokens_per_day: int = 500_000
     context_window_messages: int = 50
+    memory_max_chars: int = 8_000
 
     @property
     def channels_dir(self) -> Path:
@@ -50,6 +56,14 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "tagopen.db"
+
+    @property
+    def model_allowlist(self) -> list[str]:
+        return [m.strip() for m in self.llm_model_allowlist.split(",") if m.strip()]
+
+    @property
+    def fallback_models(self) -> list[str]:
+        return [m.strip() for m in self.llm_fallbacks.split(",") if m.strip()]
 
 
 settings = Settings()  # type: ignore[call-arg]

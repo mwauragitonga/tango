@@ -67,7 +67,7 @@ async def dispatch_tool(fn_name: str, args: dict[str, Any], channel_id: str) -> 
     """Dispatch a tool call to built-ins or MCP servers."""
     builtin_names = {t["function"]["name"] for t in BUILTIN_TOOLS}
     if fn_name in builtin_names:
-        return await dispatch_builtin(fn_name, args)
+        return await dispatch_builtin(fn_name, args, channel_id=channel_id)
 
     if fn_name in ("memory_append", "memory_replace"):
         return None

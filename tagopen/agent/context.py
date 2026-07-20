@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from tagopen.agent.skill_catalog import format_skills_index
 from tagopen.config import settings
 from tagopen.memory.store import MessageStore
 
@@ -33,31 +34,50 @@ def _read_org_file(filename: str, default: str = "") -> str:
     return default
 
 
+def _bound_memory(text: str) -> str:
+    """Hermes-style char bound so MEMORY.md cannot blow the prompt."""
+    text = text.strip()
+    max_chars = settings.memory_max_chars
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 80].rstrip() + "\n\n…(MEMORY.md truncated for prompt size)"
+
+
 def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
-    """Assemble system prompt: ORG.md + CHANNEL.md + MEMORY.md + skills + guardrails."""
+    """Assemble: ORG → SOUL → PERSONALITY → CHANNEL → MEMORY (bounded) → skills index."""
     org_md = _read_org_file("ORG.md", _DEFAULT_ORG_MD)
-    # Optional channel-local personality override (SOUL-like, channel-scoped)
+    soul_md = _read_org_file("SOUL.md", "")
     personality = _read_channel_file(channel_id, "PERSONALITY.md", "")
     channel_md = _read_channel_file(channel_id, "CHANNEL.md", _DEFAULT_CHANNEL_MD)
-    memory_md = _read_channel_file(channel_id, "MEMORY.md", "")
-    skills = _load_skills(channel_id)
+    memory_md = _bound_memory(_read_channel_file(channel_id, "MEMORY.md", ""))
+    skills_index = format_skills_index(channel_id)
 
     parts: list[str] = []
 
     if org_md.strip():
         parts.append(f"## Organization context\n\n{org_md.strip()}")
 
+    if soul_md.strip():
+        parts.append(f"## Soul (org persona)\n\n{soul_md.strip()}")
+
     if personality.strip():
-        parts.append(f"## Personality\n\n{personality.strip()}")
+        parts.append(
+            "## Personality (channel overlay)\n\n"
+            "This overlays tone for this room only; it does not replace org SOUL.\n\n"
+            f"{personality.strip()}"
+        )
 
     parts.append(channel_md.strip())
 
-    if memory_md.strip():
-        parts.append(f"## What I know about this channel\n\n{memory_md.strip()}")
+    if memory_md:
+        parts.append(
+            "## What I know about this channel\n\n"
+            "Channel-scoped only — never invent private personal USER facts.\n\n"
+            f"{memory_md}"
+        )
 
-    if skills:
-        skill_block = "\n\n".join(f"### Skill: {name}\n{content}" for name, content in skills)
-        parts.append(f"## Available skills\n\n{skill_block}")
+    if skills_index:
+        parts.append(skills_index)
 
     if user_map:
         roster = ", ".join(f"@{name}" for name in sorted(set(user_map.values()))[:40])
@@ -83,9 +103,12 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
     parts.append(
         "## Tools\n"
         "Use tools when they improve accuracy (web_search for current events, "
-        "MCP tools for org systems). Prefer tools over guessing. "
+        "MCP tools for org systems, skills_list/skill_view for playbooks). "
+        "Prefer tools over guessing. "
         "For write actions against external systems, confirm with the requester first "
-        "unless the channel CHANNEL.md explicitly allows autonomous writes."
+        "unless the channel CHANNEL.md explicitly allows autonomous writes. "
+        "Escalate to hermes_ask (if available) only for Contabo-power tasks Hermes already owns — "
+        "not routine Q&A."
     )
 
     parts.append(
@@ -95,20 +118,13 @@ def build_system_prompt(channel_id: str, user_map: dict[str, str]) -> str:
         "sessions would genuinely benefit from knowing."
     )
 
+    parts.append(
+        "## Model switching\n"
+        "Users may set a thread model with `@Tango model <id>`, list with `@Tango model`, "
+        "or reset with `@Tango model reset`. Channel pin: `@Tango model channel <id>`."
+    )
+
     return "\n\n---\n\n".join(parts)
-
-
-def _load_skills(channel_id: str) -> list[tuple[str, str]]:
-    skills_dir = settings.channels_dir / channel_id / "skills"
-    if not skills_dir.exists():
-        return []
-    results = []
-    for path in sorted(skills_dir.glob("*.md")):
-        content = path.read_text()
-        if "status: archived" in content:
-            continue
-        results.append((path.stem, content))
-    return results
 
 
 async def build_messages(

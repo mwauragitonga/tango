@@ -48,6 +48,16 @@ CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
 END;
 """
 
+_CREATE_THREAD_MODELS = """
+CREATE TABLE IF NOT EXISTS thread_models (
+    channel_id  TEXT NOT NULL,
+    thread_ts   TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    updated_at  REAL NOT NULL DEFAULT (unixepoch('now', 'subsec')),
+    PRIMARY KEY (channel_id, thread_ts)
+);
+"""
+
 
 class MessageStore:
     def __init__(self, db_path: Path, channel_id: str) -> None:
@@ -61,7 +71,9 @@ class MessageStore:
         self._db.row_factory = aiosqlite.Row
         await self._db.execute("PRAGMA journal_mode=WAL")
         await self._db.execute("PRAGMA foreign_keys=ON")
-        await self._db.executescript(_CREATE_MESSAGES + _CREATE_FTS + _CREATE_TRIGGERS)
+        await self._db.executescript(
+            _CREATE_MESSAGES + _CREATE_FTS + _CREATE_TRIGGERS + _CREATE_THREAD_MODELS
+        )
         await self._db.commit()
 
     async def add_message(
@@ -108,6 +120,36 @@ class MessageStore:
             (query, self._channel_id, limit),
         ) as cursor:
             return await cursor.fetchall()
+
+    async def get_thread_model(self, thread_ts: str) -> str | None:
+        assert self._db
+        async with self._db.execute(
+            """SELECT model FROM thread_models
+               WHERE channel_id = ? AND thread_ts = ?""",
+            (self._channel_id, thread_ts),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return row["model"] if row else None
+
+    async def set_thread_model(self, thread_ts: str, model: str) -> None:
+        assert self._db
+        await self._db.execute(
+            """INSERT INTO thread_models (channel_id, thread_ts, model)
+               VALUES (?, ?, ?)
+               ON CONFLICT(channel_id, thread_ts) DO UPDATE SET
+                 model = excluded.model,
+                 updated_at = unixepoch('now', 'subsec')""",
+            (self._channel_id, thread_ts, model),
+        )
+        await self._db.commit()
+
+    async def clear_thread_model(self, thread_ts: str) -> None:
+        assert self._db
+        await self._db.execute(
+            """DELETE FROM thread_models WHERE channel_id = ? AND thread_ts = ?""",
+            (self._channel_id, thread_ts),
+        )
+        await self._db.commit()
 
     async def close(self) -> None:
         if self._db:
