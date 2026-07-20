@@ -27,7 +27,7 @@ Legend:
 | Tool policy + HITL | yes | yes | yes | partial | `tools/policy.py`; thread `approve\|deny <id>`; canary pause/resume |
 | MCP pool + HTTP/SSE | yes | yes | yes (stdio) | partial | `tools/mcp_client.py`; Contabo org_kb / hermes stdio |
 | LiteLLM gateway + usage rows | yes | yes | yes | partial | `llm/gateway.py` → `llm_usage`; Contabo still **SDK** not Proxy |
-| LiteLLM streaming + first-token hook | yes | yes | **yes** | partial | `LLM_STREAM` default true; `on_first_token` → `speech_balloon`; canary 2026-07-21 |
+| LiteLLM streaming + first-token hook | yes | yes | **yes** | partial | `LLM_STREAM` default true; `on_first_token` → `pencil2`; canary 2026-07-21 |
 | Slack chunked posts | yes | yes | **yes** | yes | `slack_post.py`; canary `CHUNK_OK` |
 | Per-tool Slack status | yes | yes | **yes** | yes | `slack_status.py`; tool canary used `web_search` (Nairobi weather) |
 | LiteLLM Proxy deploy | yes | **no** | no | scaffold | `deploy/litellm-proxy/`; image digest still placeholder |

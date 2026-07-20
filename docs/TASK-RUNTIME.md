@@ -23,9 +23,10 @@ Long replies are chunked into ordered thread messages (`tagopen/slack_post.py`).
 
 | Signal | When | Source |
 |--------|------|--------|
-| `thinking_face` | Mention accepted | `gateway/app.py` + `SlackStatus.llm_start` |
-| `speech_balloon` | First streamed LLM token (text or tool-call delta) | `llm/gateway.py` `on_first_token` → `SlackStatus.llm_first_token` |
-| Tool emoji (`mag` / `snake` / `clipboard` / `gear`) | Tool dispatch start/end | `SlackStatus.tool_start` / `tool_end` |
+| `hourglass_flowing_sand` | Mention accepted / working | `gateway/app.py` + `SlackStatus.llm_start` |
+| `pencil2` | First streamed LLM token (text or tool-call delta) | `llm/gateway.py` `on_first_token` → `SlackStatus.llm_first_token` |
+| Tool emoji (`mag` / `computer` / `brain` / `clipboard` / `gear`) | Tool dispatch start/end | `SlackStatus.tool_start` / `tool_end` |
+| `raised_hand` (reserved) | Waiting on approve/deny | Constant in `slack_status.py`; HITL still posts a thread notice |
 
 Agent completions stream by default (`LLM_STREAM=true` → LiteLLM `stream=True`, rebuilt via `stream_chunk_builder`). Set `LLM_STREAM=false` to disable. Callers still receive a full aggregated response.
 

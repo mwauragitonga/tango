@@ -1,6 +1,7 @@
 ## [Unreleased] — Slack stream + chunk UX
 
-- Stream LiteLLM agent completions by default (`LLM_STREAM`); Slack `speech_balloon` on first token
+- Stream LiteLLM agent completions by default (`LLM_STREAM`); Slack `pencil2` on first token
+- Clearer Slack status reactions: `hourglass_flowing_sand` (working), `pencil2` (streaming), `computer` (code), `brain` (memory), `mag` / `clipboard` / `gear` unchanged
 - Chunk long Slack replies; per-tool status reactions; multi-file delivery prompt rules
 - Contabo canary (`#all-toshius-klay`): `STREAM_OK` / `CHUNK_OK`, `web_search` → `SEARCH_OK` (2026-07-21)
 

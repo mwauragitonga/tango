@@ -53,7 +53,7 @@ Interactivity is **off** today — HITL is plain-text `approve <id>` / `deny <id
 | `channels:read` | Channel metadata; `conversations.members` for attribution (`users.py`) | include | include |
 | `groups:history` | Private channel/thread context + `message.groups` | include | include |
 | `groups:read` | Private channel metadata / `conversations.members` | include | include |
-| `reactions:write` | `thinking_face` add/remove on mentions | include | include |
+| `reactions:write` | Status reactions add/remove on mentions | include | include |
 | `users:read` | Display names via `users.info` | include | include |
 | `channels:join` | `conversations.join` without `/invite` (Contabo convenience) | include | **exclude** — `/invite @Tango` is enough; reviewers prefer less privilege |
 | `reactions:read` | Not used | exclude | exclude |
@@ -216,7 +216,7 @@ settings:
 | Why `message.channels` / `message.groups`? | Thread-only HITL (`approve`/`deny`) and resume; ignore top-level channel noise and bot messages |
 | Why `groups:*`? | Same coworker UX in private channels the bot is invited to |
 | Why not `channels:join`? | Omitted on Directory; users `/invite @Tango` |
-| Why `reactions:write`? | Ephemeral `thinking_face` while processing a mention |
+| Why `reactions:write`? | Ephemeral status reactions while processing a mention |
 | Why `users:read`? | Display names for multiplayer attribution — not email |
 
 ### Process

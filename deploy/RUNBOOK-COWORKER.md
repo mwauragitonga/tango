@@ -22,7 +22,7 @@
 
 ## Slack mid-run UX (Contabo)
 
-- Mentions: `thinking_face` → first token `speech_balloon` → tool emoji → clear on finish
+- Mentions: `hourglass_flowing_sand` → first token `pencil2` → tool emoji (`mag` / `computer` / `brain` / `clipboard` / `gear`) → clear on finish
 - Long replies: chunked via `tagopen/slack_post.py`
 - Disable streaming: `LLM_STREAM=false` in `.env`, then `systemctl restart open-claude-tag`
 - Canary channel: `#all-toshius-klay` (`C09P2TTBYV8`)

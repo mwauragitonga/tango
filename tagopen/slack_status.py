@@ -7,8 +7,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-THINKING_EMOJI = "thinking_face"
-FIRST_TOKEN_EMOJI = "speech_balloon"
+# Standard Slack shortcodes (no colons). Keep the set small to limit reaction churn.
+THINKING_EMOJI = "hourglass_flowing_sand"  # working / accepted
+FIRST_TOKEN_EMOJI = "pencil2"  # LLM streaming / composing reply
+APPROVAL_EMOJI = "raised_hand"  # waiting on human approve/deny (docs + future wiring)
 
 
 def emoji_for_tool(tool_name: str) -> str:
@@ -16,7 +18,9 @@ def emoji_for_tool(tool_name: str) -> str:
     if tool_name == "web_search":
         return "mag"
     if tool_name == "run_python":
-        return "snake"
+        return "computer"
+    if tool_name.startswith("memory_"):
+        return "brain"
     if tool_name.startswith("task_"):
         return "clipboard"
     return "gear"
@@ -42,7 +46,7 @@ class SlackStatus:
         self._status_msg_ts: str | None = None
 
     async def llm_start(self) -> None:
-        """Ensure thinking_face is present on the event (idempotent)."""
+        """Ensure thinking emoji is present on the event (idempotent)."""
         if not self.event_ts:
             return
         await self._reactions_add(THINKING_EMOJI)
@@ -108,12 +112,12 @@ class SlackStatus:
             if self._active_tool_emoji == emoji:
                 await self._reactions_remove(emoji)
                 self._active_tool_emoji = None
-            # Leave thinking_face in place until finish() / gateway cleanup.
+            # Leave thinking emoji in place until finish() / gateway cleanup.
             return
         await self._clear_status_post()
 
     async def finish(self) -> None:
-        """Best-effort cleanup of tool reaction/status and thinking_face."""
+        """Best-effort cleanup of tool reaction/status and thinking emoji."""
         if self._active_tool_emoji and self.event_ts:
             await self._reactions_remove(self._active_tool_emoji)
             self._active_tool_emoji = None

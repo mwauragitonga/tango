@@ -16,7 +16,8 @@ from tagopen.gateway.approve import parse_approve_command
 from tagopen.gateway.router import route_message
 from tagopen.memory.store import get_store
 from tagopen.scheduler.service import start_scheduler
-from tagopen.slack_status import SlackStatus
+from tagopen.slack_status import THINKING_EMOJI, SlackStatus
+from tagopen.tasks.checkpoint import stitch_approval_into_task
 from tagopen.tasks.service import TaskService
 from tagopen.tasks.store import get_task_store
 from tagopen.tasks.worker import get_worker
@@ -35,7 +36,7 @@ async def handle_mention(event: dict, say, client) -> None:
     text = event["text"]
     thread_ts = event.get("thread_ts") or event["ts"]
 
-    await client.reactions_add(channel=channel_id, timestamp=event["ts"], name="thinking_face")
+    await client.reactions_add(channel=channel_id, timestamp=event["ts"], name=THINKING_EMOJI)
 
     try:
         await route_message(
@@ -55,11 +56,11 @@ async def handle_mention(event: dict, say, client) -> None:
             thread_ts=thread_ts,
         )
     finally:
-        # SlackStatus.finish() may already have cleared thinking_face — treat
+        # SlackStatus.finish() may already have cleared the thinking emoji — treat
         # no_reaction as success; only log unexpected Slack errors.
         try:
             await client.reactions_remove(
-                channel=channel_id, timestamp=event["ts"], name="thinking_face"
+                channel=channel_id, timestamp=event["ts"], name=THINKING_EMOJI
             )
         except Exception as e:
             err = ""
@@ -69,9 +70,9 @@ async def handle_mention(event: dict, say, client) -> None:
                 if isinstance(data, dict):
                     err = str(data.get("error") or "")
             if err == "no_reaction" or "no_reaction" in str(e):
-                logger.debug("thinking_face already removed in %s", channel_id)
+                logger.debug("%s already removed in %s", THINKING_EMOJI, channel_id)
             else:
-                logger.exception("Failed to remove thinking_face reaction in %s", channel_id)
+                logger.exception("Failed to remove %s reaction in %s", THINKING_EMOJI, channel_id)
 
 
 @app.event("message")

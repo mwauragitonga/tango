@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tagopen.slack_status import SlackStatus, emoji_for_tool
+from tagopen.slack_status import THINKING_EMOJI, SlackStatus, emoji_for_tool
 
 
 def test_emoji_mapping():
     assert emoji_for_tool("web_search") == "mag"
-    assert emoji_for_tool("run_python") == "snake"
+    assert emoji_for_tool("run_python") == "computer"
+    assert emoji_for_tool("memory_append") == "brain"
+    assert emoji_for_tool("memory_replace") == "brain"
     assert emoji_for_tool("task_plan") == "clipboard"
     assert emoji_for_tool("task_update") == "clipboard"
     assert emoji_for_tool("some_mcp_tool") == "gear"
@@ -30,7 +32,7 @@ async def test_tool_lifecycle_uses_reactions_when_event_ts():
     )
     await status.llm_start()
     client.reactions_add.assert_awaited_with(
-        channel="C1", timestamp="1.0", name="thinking_face"
+        channel="C1", timestamp="1.0", name=THINKING_EMOJI
     )
 
     await status.tool_start("web_search")
