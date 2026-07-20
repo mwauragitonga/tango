@@ -104,13 +104,15 @@ async def run_agent_loop(
     if not final_text:
         final_text = "Done."
 
-    # Post reply to Slack
+    # Post reply to Slack (no link unfurls — OG cards often show raw &#x27; etc.)
     slack_text = to_slack_mrkdwn(final_text)
     await app.client.chat_postMessage(
         channel=channel_id,
         text=slack_text,
         thread_ts=thread_ts,
         mrkdwn=True,
+        unfurl_links=False,
+        unfurl_media=False,
     )
 
     # Persist assistant reply

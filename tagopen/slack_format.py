@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 
 
@@ -19,6 +20,15 @@ def strip_reply_artifacts(text: str) -> str:
     return cleaned.strip()
 
 
+def decode_html_entities(text: str) -> str:
+    """Decode &amp; / &#x27; / &quot; etc. (search snippets and model copies often leak these)."""
+    if not text:
+        return text
+    # Run twice in case of double-encoding (&amp;#x27; → &#x27; → ')
+    once = html.unescape(text)
+    return html.unescape(once)
+
+
 def to_slack_mrkdwn(text: str) -> str:
     """Best-effort CommonMark -> Slack mrkdwn.
 
@@ -29,6 +39,7 @@ def to_slack_mrkdwn(text: str) -> str:
         return text
 
     text = strip_reply_artifacts(text)
+    text = decode_html_entities(text)
 
     placeholders: list[str] = []
 
@@ -44,6 +55,13 @@ def to_slack_mrkdwn(text: str) -> str:
     text = re.sub(
         r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
         r"<\2|\1>",
+        text,
+    )
+
+    # Bare URLs that still contain &amp; → &
+    text = re.sub(
+        r"(https?://[^\s>|]+)",
+        lambda m: decode_html_entities(m.group(1)),
         text,
     )
 

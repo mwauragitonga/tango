@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -10,6 +12,15 @@ import httpx
 from tagopen.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _clean(text: str) -> str:
+    """Strip HTML tags/entities from provider snippets before the LLM sees them."""
+    if not text:
+        return ""
+    text = html.unescape(html.unescape(text))
+    text = re.sub(r"<[^>]+>", "", text)
+    return " ".join(text.split())
 
 
 def _resolve_provider() -> str:
@@ -30,14 +41,18 @@ def _resolve_provider() -> str:
 def _format_results(rows: list[dict[str, str]], limit: int = 5) -> str:
     lines: list[str] = []
     for row in rows[:limit]:
-        title = (row.get("title") or "").strip()
-        url = (row.get("url") or "").strip()
-        snippet = (row.get("snippet") or "").strip()
+        title = _clean(row.get("title") or "")
+        url = html.unescape(html.unescape((row.get("url") or "").strip()))
+        snippet = _clean(row.get("snippet") or "")
         if not title and not snippet:
             continue
-        block = f"- *{title}*" if title else "-"
-        if url:
-            block += f"\n  {url}"
+        # Slack mrkdwn link so the model can copy a clean form
+        if title and url:
+            block = f"- <{url}|{title}>"
+        elif title:
+            block = f"- *{title}*"
+        else:
+            block = "-"
         if snippet:
             block += f"\n  {snippet}"
         lines.append(block)
