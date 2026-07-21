@@ -45,7 +45,11 @@ async def route_message(
     thread_ts: str,
     event_ts: str,
     event_id: str | None = None,
+    files: list | None = None,
 ) -> None:
+    from tagopen.config import settings
+    from tagopen.media.prepare import prepare_slack_files
+
     task_store = await get_task_store(workspace_id)
     event_key = event_id or f"{channel_id}:{event_ts}"
     first = await task_store.claim_slack_event(workspace_id, event_key)
@@ -56,6 +60,14 @@ async def route_message(
     session = get_or_create_session(workspace_id, channel_id)
     store = await get_store(workspace_id, channel_id)
     display_name = await get_display_name(app, user_id)
+
+    prepared = await prepare_slack_files(
+        files=files or None,
+        bot_token=settings.slack_bot_token or getattr(app.client, "token", "") or "",
+        workspace_id=workspace_id,
+        channel_id=channel_id,
+        thread_ts=thread_ts,
+    )
 
     # Durable path releases quickly; lock only wraps dispatch start
     async with session._lock:
@@ -69,4 +81,5 @@ async def route_message(
             thread_ts=thread_ts,
             event_ts=event_ts,
             store=store,
+            prepared=prepared,
         )

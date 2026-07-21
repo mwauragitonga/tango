@@ -18,6 +18,7 @@ _READ_TOOLS = {
     "web_search",
     "search_channel_history",
     "list_tools",
+    "read_attachment",
     "skills_list",
     "skill_view",
     "task_status",

@@ -38,6 +38,8 @@ from tagopen.gateway.users import get_user_map
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
 
+    from tagopen.media.prepare import PreparedAttachments
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,13 +53,17 @@ async def run_inline_turn(
     thread_ts: str,
     event_ts: str,
     store: MessageStore,
+    prepared: "PreparedAttachments | None" = None,
 ) -> None:
+    from tagopen.media.content import text_with_addon
+
+    store_text = text_with_addon(text, prepared)
     await store.add_message(
         ts=event_ts,
         role="user",
         user_id=user_id,
         display_name=display_name,
-        content=text,
+        content=store_text,
         thread_ts=thread_ts,
     )
 
@@ -116,6 +122,7 @@ async def run_inline_turn(
         thread_ts=thread_ts,
         current_user=display_name,
         current_text=text,
+        prepared=prepared,
     )
 
     task_store = await get_task_store(workspace_id)

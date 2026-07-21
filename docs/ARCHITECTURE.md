@@ -67,6 +67,10 @@ flowchart LR
 - **Contabo / single-tenant:** in-process SDK (current).
 - **Multi-tenant SaaS:** [LITELLM-PROXY.md](./LITELLM-PROXY.md) + `deploy/litellm-proxy/` (not Contabo production yet).
 
+## Multimodal attachments
+
+Hermes-style cache → route → inject. See [MULTIMODAL.md](./MULTIMODAL.md).
+
 ## SaaS direction
 
 See [SAAS-ROADMAP.md](./SAAS-ROADMAP.md) and [SLACK-SAAS-MANIFEST.md](./SLACK-SAAS-MANIFEST.md). Tenants must never depend on Contabo Hermes/OpenClaw.

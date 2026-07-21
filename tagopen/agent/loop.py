@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING
 
 from tagopen.agent.runtime import run_inline_turn
+from tagopen.media.content import text_with_addon
 from tagopen.memory.store import MessageStore
 from tagopen.tasks.service import TaskService, should_queue_durable
 from tagopen.tasks.store import get_task_store
@@ -14,6 +15,8 @@ from tagopen.tasks.worker import get_worker
 
 if TYPE_CHECKING:
     from slack_bolt.async_app import AsyncApp
+
+    from tagopen.media.prepare import PreparedAttachments
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ async def run_agent_loop(
     thread_ts: str,
     event_ts: str,
     store: MessageStore,
+    prepared: "PreparedAttachments | None" = None,
 ) -> None:
     text = strip_bot_mention(text)
     task_store = await get_task_store(workspace_id)
@@ -74,24 +78,33 @@ async def run_agent_loop(
             return
 
     if should_queue_durable(text):
+        import json
         import time
 
         from tagopen.tasks.models import TaskStatus
         from tagopen.tasks.worker import WORKER_ID
 
+        objective = text_with_addon(text, prepared)
         task = await svc.create_task(
             workspace_id=workspace_id,
             channel_id=channel_id,
             thread_ts=thread_ts,
             requester_user_id=user_id,
-            objective=text,
+            objective=objective,
         )
+        if prepared and (prepared.cached_paths or prepared.native_images):
+            try:
+                ck = json.loads(task.checkpoint_json or "{}")
+            except json.JSONDecodeError:
+                ck = {}
+            ck["attachments"] = prepared.to_checkpoint()
+            task.checkpoint_json = json.dumps(ck)
         await store.add_message(
             ts=event_ts,
             role="user",
             user_id=user_id,
             display_name=display_name,
-            content=text,
+            content=objective,
             thread_ts=thread_ts,
         )
         # Take lease immediately so the background worker cannot double-run
@@ -113,4 +126,5 @@ async def run_agent_loop(
         thread_ts=thread_ts,
         event_ts=event_ts,
         store=store,
+        prepared=prepared,
     )

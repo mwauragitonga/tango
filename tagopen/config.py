@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     ambient_quiet_hours: str = ""  # e.g. "22-07" local
     ambient_monthly_budget_usd: float = 5.0
 
+    # Multimodal attachments (Hermes-style: cache → route → inject)
+    # auto = native pixels when model looks vision-capable, else vision_analyze text
+    image_input_mode: str = "auto"  # auto | native | text
+    llm_vision_capability: str = "auto"  # auto | true | false
+    llm_vision_models: str = ""  # optional comma allowlist of vision model ids
+    vision_model: str = ""  # aux model for text-mode image describe
+    media_max_bytes: int = 20 * 1024 * 1024  # Slack bot-ish default
+    media_inline_text_max_bytes: int = 100 * 1024
+
     # Temporal (optional SaaS adapter)
     temporal_enabled: bool = False
     temporal_host: str = "localhost:7233"

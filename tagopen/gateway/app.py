@@ -48,6 +48,7 @@ async def handle_mention(event: dict, say, client) -> None:
             thread_ts=thread_ts,
             event_ts=event["ts"],
             event_id=event.get("client_msg_id") or event.get("event_ts") or event["ts"],
+            files=event.get("files") or [],
         )
     except Exception:
         logger.exception("Error handling mention in %s", channel_id)
@@ -78,16 +79,22 @@ async def handle_mention(event: dict, say, client) -> None:
 @app.event("message")
 async def handle_message(event: dict, client) -> None:
     """Handle thread replies for approvals / resume — ignore channel noise."""
-    if event.get("subtype") or event.get("bot_id"):
+    if event.get("bot_id"):
+        return
+    subtype = event.get("subtype")
+    # Allow file_share so thread @mentions with uploads reach multimodal prepare.
+    # Other subtypes (channel_join, message_changed, …) stay ignored.
+    if subtype and subtype != "file_share":
         return
     thread_ts = event.get("thread_ts")
     if not thread_ts:
-        return  # top-level channel messages still require @mention
+        return  # top-level channel messages still require @mention (app_mention)
 
     text = strip_bot_mention(event.get("text") or "")
     channel_id = event["channel"]
     user_id = event["user"]
     workspace_id = (await client.auth_test())["team_id"]
+    files = event.get("files") or []
 
     parsed = parse_approve_command(text)
     if parsed:
@@ -183,7 +190,7 @@ async def handle_message(event: dict, client) -> None:
                 get_worker(app).start()
                 await get_worker(app).run_task(task, store, event_ts=event["ts"])
                 return
-        # Mentions inside threads: route as normal agent turn
+        # Mentions inside threads (incl. file_share + @Tango): normal agent turn
         if "<@" in (event.get("text") or ""):
             await route_message(
                 app=app,
@@ -194,6 +201,7 @@ async def handle_message(event: dict, client) -> None:
                 thread_ts=thread_ts,
                 event_ts=event["ts"],
                 event_id=event.get("client_msg_id") or event["ts"],
+                files=files,
             )
 
 

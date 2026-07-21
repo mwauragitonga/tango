@@ -12,8 +12,9 @@ Tango **borrows product patterns** from Hermes Agent and OpenClaw. It does **not
 | MCP naming | `mcp_<server>_<tool>` | same |
 | Model switch | `/model` session | `@Tango model …` (thread) |
 | Memory bounds | char-capped MEMORY/USER | channel `MEMORY.md` truncated in prompt |
+| Multimodal ingress | cache → native vision or `vision_analyze` text; path+skills for docs | same shape via `tagopen/media/` + `read_attachment` ([MULTIMODAL.md](./MULTIMODAL.md)) |
 
-**Do not copy:** terminal/computer-use/browser as default Slack tools; instance-global SOUL as the only persona; WhatsApp/Telegram gateway coupling.
+**Do not copy:** terminal/computer-use/browser as default Slack tools; instance-global SOUL as the only persona; WhatsApp/Telegram gateway coupling; Hermes multi-IM gateway media stack as a dependency.
 
 ## OpenClaw (Contabo: nvm Node 22 package)
 

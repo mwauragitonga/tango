@@ -8,11 +8,17 @@ import time
 from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
+from typing import TYPE_CHECKING, Any
+
 from tagopen.agent.context import build_system_prompt
 from tagopen.agent.skill_lifecycle import format_match_hint
 from tagopen.config import settings
+from tagopen.media.content import build_user_message_content
 from tagopen.memory.store import MessageStore
 from tagopen.tasks.models import Task
+
+if TYPE_CHECKING:
+    from tagopen.media.prepare import PreparedAttachments
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +61,7 @@ class ContextEngine:
         task: Task | None = None,
         memories: list[str] | None = None,
         compaction_summaries: list[str] | None = None,
+        prepared: "PreparedAttachments | None" = None,
     ) -> tuple[str, list[dict]]:
         system = build_system_prompt(channel_id, user_map, tool_schemas=tool_schemas)
         hint = format_match_hint(channel_id, current_text)
@@ -79,6 +86,14 @@ class ContextEngine:
                 "\n\n---\n\n## Compacted earlier context\n\n"
                 + "\n\n".join(compaction_summaries[-3:])
             )
+        system += (
+            "\n\n---\n\n## Attachments\n"
+            "Slack files are downloaded to the media cache. Small UTF-8 text may be "
+            "inlined under --- Attached files ---. Images arrive as native vision "
+            "parts when the model supports vision, otherwise as a text description. "
+            "PDFs/Office/spreadsheets get a path note — use `read_attachment` before "
+            "answering from their contents. Do not assume binary docs are OCR'd."
+        )
 
         recent = await store.get_recent_messages(
             limit=settings.context_window_messages,
@@ -94,7 +109,14 @@ class ContextEngine:
                 content = f"[{ts_str} @{name}] {content}"
             messages.append({"role": role, "content": content})
 
-        messages.append({"role": "user", "content": f"[@{current_user}] {current_text}"})
+        # Current turn may be multimodal (native images). History stays text-only
+        # (Hermes turn-scoped media — pixels are not replayed every turn).
+        user_content: str | list[dict[str, Any]] = build_user_message_content(
+            display_name=current_user,
+            text=current_text,
+            prepared=prepared,
+        )
+        messages.append({"role": "user", "content": user_content})
         return system, messages
 
     async def compact(

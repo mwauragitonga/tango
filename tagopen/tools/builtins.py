@@ -102,6 +102,28 @@ BUILTIN_TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "read_attachment",
+            "description": (
+                "Read or extract text from a Slack file that was downloaded into the "
+                "workspace media cache (paths shown in --- Attached files --- notes). "
+                "Use for PDFs/text/docs when content was not inlined. "
+                "Does not accept arbitrary filesystem paths."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path under data/media/… from the attachment note",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "skills_list",
             "description": (
                 "List channel skills (name + description only). "
@@ -159,6 +181,10 @@ async def dispatch_builtin(
             "search_channel_history must be invoked via ToolExecutor with a message store; "
             f"query={args.get('query')!r}"
         )
+    if fn_name == "read_attachment":
+        from tagopen.media.read_attachment import read_attachment
+
+        return read_attachment(str(args.get("path") or ""))
     if fn_name == "skills_list":
         if not channel_id:
             return "skills_list requires a channel context."

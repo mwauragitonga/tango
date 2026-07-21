@@ -55,9 +55,10 @@ Interactivity is **off** today — HITL is plain-text `approve <id>` / `deny <id
 | `groups:read` | Private channel metadata / `conversations.members` | include | include |
 | `reactions:write` | Status reactions add/remove on mentions | include | include |
 | `users:read` | Display names via `users.info` | include | include |
+| `files:read` | Download user-uploaded images/docs on `@Tango` turns ([MULTIMODAL.md](./MULTIMODAL.md)) | include | include |
 | `channels:join` | `conversations.join` without `/invite` (Contabo convenience) | include | **exclude** — `/invite @Tango` is enough; reviewers prefer less privilege |
 | `reactions:read` | Not used | exclude | exclude |
-| `files:*`, `im:*`, `mpim:*`, `commands`, `users:read.email` | Not used | exclude | exclude |
+| `files:write`, `im:*`, `mpim:*`, `commands`, `users:read.email` | Not used (inbound-only media; no Slack file uploads yet) | exclude | exclude |
 | User (non-bot) scopes | Not used | exclude | exclude |
 
 ### Bot events
@@ -108,6 +109,7 @@ oauth_config:
       - groups:read
       - reactions:write
       - users:read
+      - files:read
 
 settings:
   event_subscriptions:
@@ -123,7 +125,7 @@ settings:
   token_rotation_enabled: false
 ```
 
-**After paste:** verify Events Request URL (Slack must reach `POST /slack/events` and complete `url_verification`). Copy **Signing Secret**, **Client ID**, **Client Secret** into SaaS env. Align OAuth authorize `scope=` with the bot list above (see `tenancy/http_app.py`).
+**After paste:** verify Events Request URL (Slack must reach `POST /slack/events` and complete `url_verification`). Copy **Signing Secret**, **Client ID**, **Client Secret** into SaaS env. Align OAuth authorize `scope=` with the bot list above (see `tenancy/http_app.py`). Re-install the Contabo Socket Mode app after adding `files:read`.
 
 ---
 
@@ -162,6 +164,7 @@ oauth_config:
       - groups:read
       - reactions:write
       - users:read
+      - files:read
 
 settings:
   event_subscriptions:
@@ -218,6 +221,7 @@ settings:
 | Why not `channels:join`? | Omitted on Directory; users `/invite @Tango` |
 | Why `reactions:write`? | Ephemeral status reactions while processing a mention |
 | Why `users:read`? | Display names for multiplayer attribution — not email |
+| Why `files:read`? | Download images/docs attached to `@Tango` mentions into a workspace cache; no `files:write` |
 
 ### Process
 
@@ -233,13 +237,13 @@ settings:
 Preview authorize scopes (matches preview manifest):
 
 ```text
-app_mentions:read,chat:write,channels:history,channels:read,channels:join,groups:history,groups:read,reactions:write,users:read
+app_mentions:read,chat:write,channels:history,channels:read,channels:join,groups:history,groups:read,reactions:write,users:read,files:read
 ```
 
 Directory authorize scopes:
 
 ```text
-app_mentions:read,chat:write,channels:history,channels:read,groups:history,groups:read,reactions:write,users:read
+app_mentions:read,chat:write,channels:history,channels:read,groups:history,groups:read,reactions:write,users:read,files:read
 ```
 
 Update `tagopen/tenancy/http_app.py` `oauth_start` `scope=` to match the app you ship (preview vs Directory). A mismatch causes silent missing_scope at runtime.

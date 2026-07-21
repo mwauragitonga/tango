@@ -28,6 +28,30 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _strip_media_parts(message: dict[str, Any]) -> dict[str, Any]:
+    """Drop base64 image parts from checkpointed messages (keep text)."""
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+    texts: list[str] = []
+    had_image = False
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "text" and part.get("text"):
+            texts.append(str(part["text"]))
+        elif part.get("type") == "image_url":
+            had_image = True
+    if not texts and not had_image:
+        return message
+    text = "\n".join(texts).strip()
+    if had_image:
+        text = (text + "\n[image attachment omitted from checkpoint]").strip()
+    out = dict(message)
+    out["content"] = text
+    return out
+
 WORKER_ID = f"{socket.gethostname()}-{id(object())}"
 
 
@@ -106,12 +130,14 @@ class TaskWorker:
 
         user_map = {task.requester_user_id: task.requester_user_id}
         messages: list[dict] = []
+        checkpoint: dict = {}
         try:
             checkpoint = json.loads(task.checkpoint_json or "{}")
             if checkpoint.get("messages"):
                 messages = checkpoint["messages"]
         except Exception:
             messages = []
+            checkpoint = {}
 
         status = SlackStatus(
             self.app.client,
@@ -149,6 +175,24 @@ class TaskWorker:
                 if task.status in TERMINAL_STATUSES:
                     return
 
+                prepared = None
+                if not messages and checkpoint.get("attachments"):
+                    from tagopen.media.prepare import (
+                        PreparedAttachments,
+                        reload_native_images_from_checkpoint,
+                    )
+
+                    # Objective already includes text_addon; only re-attach pixels.
+                    prepared = PreparedAttachments(
+                        text_addon="",
+                        native_images=reload_native_images_from_checkpoint(
+                            checkpoint.get("attachments")
+                        ),
+                        cached_paths=list(
+                            (checkpoint.get("attachments") or {}).get("cached_paths")
+                            or []
+                        ),
+                    )
                 system, built = await engine.build_context(
                     channel_id=task.channel_id,
                     user_map=user_map,
@@ -158,6 +202,7 @@ class TaskWorker:
                     current_user=task.requester_user_id,
                     current_text=task.objective,
                     task=task,
+                    prepared=prepared,
                 )
                 if not messages:
                     messages = built
@@ -280,9 +325,16 @@ class TaskWorker:
             await status.finish()
 
     async def _checkpoint(self, store: SqliteTaskStore, task: Task, messages: list[dict]) -> None:
-        # Keep last 40 messages in checkpoint to bound size
-        slim = messages[-40:]
-        task.checkpoint_json = json.dumps({"messages": slim, "at": time.time()}, default=str)
+        # Keep last 40 messages; strip native image parts (turn-scoped, Hermes-style)
+        slim = [_strip_media_parts(m) for m in messages[-40:]]
+        payload: dict = {"messages": slim, "at": time.time()}
+        try:
+            prev = json.loads(task.checkpoint_json or "{}")
+            if prev.get("attachments"):
+                payload["attachments"] = prev["attachments"]
+        except Exception:
+            pass
+        task.checkpoint_json = json.dumps(payload, default=str)
         await store.save(task)
         await store.record_event(task.id, "checkpoint", {"turns": task.turns_used})
 
